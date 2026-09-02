@@ -1,0 +1,178 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(.light, .light *));
+
+@layer base {
+  :root {
+    --font-hanken: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-hanken);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    background-color: #050505;
+    color: #ffffff;
+  }
+
+  .dark body,
+  body:not(.light) {
+    background: radial-gradient(circle at 0% 0%, #1a1a2e 0%, #050505 50%), radial-gradient(circle at 100% 100%, #2a1b3d 0%, #050505 50%);
+    background-attachment: fixed;
+  }
+
+  .light body {
+    background: radial-gradient(circle at 0% 0%, #e2e8f0 0%, #f1f5f9 50%), radial-gradient(circle at 100% 100%, #ede9fe 0%, #f1f5f9 50%);
+    background-attachment: fixed;
+    background-color: #f1f5f9;
+    color: #0f172a;
+  }
+}
+
+/* Frosted Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.15);
+  border-radius: 9999px;
+  border: 1px solid rgba(15, 23, 42, 0.05);
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Frosted Glass Theme Utilities */
+.liquid-glass,
+.frosted-glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.light .liquid-glass,
+.light .frosted-glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03), inset 0 1px 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.liquid-glass-heavy,
+.frosted-glass-heavy {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(36px);
+  -webkit-backdrop-filter: blur(36px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.6), inset 0 1px 2px 0 rgba(255, 255, 255, 0.15);
+}
+
+.light .liquid-glass-heavy,
+.light .frosted-glass-heavy {
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(36px);
+  -webkit-backdrop-filter: blur(36px);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  box-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.1), 0 4px 12px -2px rgba(15, 23, 42, 0.05), inset 0 1px 2px 0 rgba(255, 255, 255, 1);
+}
+
+/* Secondary frosted pill / container */
+.frosted-subtle {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.light .frosted-subtle {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(203, 213, 225, 0.7);
+}
+
+.specular-highlight {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 65%);
+}
+
+.light .specular-highlight {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 65%);
+}
+
+/* Shimmer Top */
+.shimmer-top {
+  position: relative;
+}
+.shimmer-top::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(165, 180, 252, 0.6), transparent);
+  animation: shimmer 4s infinite linear;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Waveform animation for voice notes */
+@keyframes pulse-wave {
+  0% { height: 4px; }
+  50% { height: 20px; }
+  100% { height: 6px; }
+}
+
+.waveform-bar {
+  width: 3px;
+  border-radius: 9999px;
+  animation: pulse-wave 1.4s infinite ease-in-out alternate;
+}
+
+/* Twin Infinity Pulse */
+@keyframes twin-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.35);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(168, 85, 247, 0.55), 0 0 15px rgba(99, 102, 241, 0.4);
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+}
+
+.twin-core-glow {
+  animation: twin-glow 4s infinite ease-in-out;
+}
+

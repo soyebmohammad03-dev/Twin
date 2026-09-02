@@ -1,0 +1,6 @@
+{
+  "name": "Twin",
+  "description": "Personal intelligence and digital twin application with Liquid Glass interface and evolving memory model",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
