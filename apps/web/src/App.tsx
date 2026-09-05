@@ -16,6 +16,7 @@ import { decisionsApi } from './services/decisionsApi';
 import { ingestionApi } from './services/ingestionApi';
 import { insightsApi } from './services/insightsApi';
 import { chatApi } from './services/chatApi';
+import { loadStoredChatMessages, persistChatMessages, clearChatMessages, purgeLegacyUnscopedChatStorage } from './services/chatSession';
 import { ApiError } from './services/apiClient';
 import { selectTopInsight } from './services/homeInsight';
 import { selectExplorationInsights } from './services/exploreInsight';
@@ -85,17 +86,18 @@ const TwinAppInner: React.FC = () => {
   const topInsight = useMemo(() => selectTopInsight(allInsights), [allInsights]);
   const explorationInsights = useMemo(() => selectExplorationInsights(allInsights), [allInsights]);
 
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem('twin_chat');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return [];
-  });
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => loadStoredChatMessages(currentUser?.id));
+  // Phase 35: tracks whose conversation is currently loaded into
+  // `chatMessages`, so a change in `currentUser` (sign-in, sign-out, or
+  // switching accounts) can reset it to the new identity's own
+  // conversation synchronously, DURING render — not in a useEffect,
+  // which would still commit and paint one frame of the previous
+  // account's messages under the new account before the effect ran.
+  const [chatMessagesOwnerId, setChatMessagesOwnerId] = useState<string | undefined>(currentUser?.id);
+  if (chatMessagesOwnerId !== currentUser?.id) {
+    setChatMessagesOwnerId(currentUser?.id);
+    setChatMessages(loadStoredChatMessages(currentUser?.id));
+  }
   const [inspectingChatMessage, setInspectingChatMessage] = useState<ChatMessage | null>(null);
 
   // Phase 21: Explore's real Knowledge Graph state. `entities` is the
@@ -316,13 +318,20 @@ const TwinAppInner: React.FC = () => {
   }
 
   useEffect(() => {
-    // Never persist a mid-flight placeholder — on reload it would just
-    // look permanently stuck (its request no longer exists to resolve
-    // it). Completed answers and failed (retryable) messages both
-    // persist normally.
-    const persistable = chatMessages.filter((m) => !m.pending);
-    localStorage.setItem('twin_chat', JSON.stringify(persistable));
-  }, [chatMessages]);
+    // Phase 35: never persist anonymous/pre-auth state, and never persist
+    // under anything but the CURRENTLY signed-in user's own key — this is
+    // also what makes the render-time reset above safe: by the time this
+    // effect can fire, chatMessagesOwnerId already matches currentUser.
+    // Mid-flight placeholders are filtered out inside persistChatMessages
+    // (on reload they'd just look permanently stuck).
+    persistChatMessages(currentUser?.id, chatMessages);
+  }, [chatMessages, currentUser?.id]);
+
+  // Phase 35: one-time purge of the old unscoped 'twin_chat' key from
+  // before conversations were scoped per user.
+  useEffect(() => {
+    purgeLegacyUnscopedChatStorage();
+  }, []);
 
   // Modals & Panels
   const [isCaptureOpen, setIsCaptureOpen] = useState(false);
@@ -487,7 +496,7 @@ const TwinAppInner: React.FC = () => {
   // persisted data now, not something to silently replace with mock
   // seeds.
   const handleResetVault = () => {
-    localStorage.removeItem('twin_chat');
+    clearChatMessages(currentUser?.id);
     setChatMessages([]);
   };
 
