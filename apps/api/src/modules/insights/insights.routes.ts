@@ -80,6 +80,7 @@ async function toEvidenceResponse(db: Queryable, userId: string, result: Insight
       relationshipId: e.relationshipId,
       personalModelFactId: e.personalModelFactId,
       sourceInsightId: e.sourceInsightId,
+      decisionHistoryId: e.decisionHistoryId,
       evidenceText: e.evidenceText,
       observedAt: e.observedAt.toISOString(),
       createdAt: e.createdAt.toISOString(),

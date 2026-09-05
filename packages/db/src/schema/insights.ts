@@ -5,6 +5,7 @@ import { entities } from './entities.js';
 import { entityRelationships } from './entityRelationships.js';
 import { memories } from './memories.js';
 import { personalModelFacts } from './personalModel.js';
+import { decisionHistory } from './decisionHistory.js';
 
 /**
  * Phase 10's Insight layer — cross-cutting, evidence-backed
@@ -100,6 +101,13 @@ export const insightEvidence = pgTable(
     // "drill down further" pointer is lost, same convention as
     // entityId/relationshipId/personalModelFactId above.
     sourceInsightId: uuid('source_insight_id').references((): AnyPgColumn => insights.id, { onDelete: 'set null' }),
+    // Phase 37: set only on 'decision_history'-type evidence rows
+    // belonging to a 'decision_evolution' insight — points at the real,
+    // immutable decision_history row (Phase 36) this evidence item
+    // quotes. set null (not cascade): if the decision itself is later
+    // deleted, this evidence row survives with its already-captured
+    // evidenceText intact, same convention as every other pointer column.
+    decisionHistoryId: uuid('decision_history_id').references(() => decisionHistory.id, { onDelete: 'set null' }),
     // The quoted/derived snippet this evidence row was matched from.
     evidenceText: text('evidence_text'),
     observedAt: timestamp('observed_at', { withTimezone: true }).notNull(),

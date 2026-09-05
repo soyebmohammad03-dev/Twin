@@ -33,6 +33,8 @@ describe('Phase 10 Insight layer — real database', () => {
   let correctFact: typeof import('../src/modules/personalModel/personalModelService.js').correctFact;
   let dismissFact: typeof import('../src/modules/personalModel/personalModelService.js').dismissFact;
   let upsertRelationshipWithEvidence: typeof import('../src/modules/graph/relationships.service.js').upsertRelationshipWithEvidence;
+  let createDecision: typeof import('../src/modules/decisions/decisions.service.js').createDecision;
+  let updateDecision: typeof import('../src/modules/decisions/decisions.service.js').updateDecision;
 
   let userId: string;
   let userToken: string;
@@ -121,6 +123,7 @@ describe('Phase 10 Insight layer — real database', () => {
     ({ createMemory } = await import('../src/modules/memories/memories.service.js'));
     ({ getCurrentModel, correctFact, dismissFact } = await import('../src/modules/personalModel/personalModelService.js'));
     ({ upsertRelationshipWithEvidence } = await import('../src/modules/graph/relationships.service.js'));
+    ({ createDecision, updateDecision } = await import('../src/modules/decisions/decisions.service.js'));
 
     const userEmail = `insights-test-${suffix}@twin.test`;
     const signup = await app.inject({
@@ -1609,6 +1612,101 @@ describe('Phase 10 Insight layer — real database', () => {
       // recurring-topic threshold, so no Personal Model fact (and
       // thus no insight) is ever created for this entity.
       expect(insight).toBeUndefined();
+    });
+  });
+
+  describe('Phase 37 — decision evolution detection', () => {
+    it('a decision with no history at all produces no decision_evolution insight — insufficient evidence, never fabricated', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const { entity } = await createDecision(db, userId, { name: name('Untouched Decision') });
+      await rebuildInsights(db, userId, now);
+      const insights = await getCurrentInsights(db, userId);
+      expect(insights.some((i) => i.insightType === 'decision_evolution' && i.subjectEntityId === entity.id)).toBe(false);
+    });
+
+    it('a decision with exactly one real transition produces exactly one decision_evolution insight, with evidence pointing at the real decision_history row', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const { entity } = await createDecision(db, userId, { name: name('Evolving Decision') });
+      await updateDecision(db, userId, entity.id, { status: 'decided', outcome: 'Chose option A' });
+
+      await rebuildInsights(db, userId, now);
+      const insights = await getCurrentInsights(db, userId);
+      const insight = insights.find((i) => i.insightType === 'decision_evolution' && i.subjectEntityId === entity.id);
+      expect(insight).toBeTruthy();
+      expect(insight!.statusClass).toBe('observed');
+      expect(insight!.observationCount).toBe(1);
+
+      const { evidence } = await getInsightEvidence(db, userId, insight!.id);
+      expect(evidence).toHaveLength(1);
+      expect(evidence[0]!.evidenceType).toBe('decision_history');
+      expect(evidence[0]!.decisionHistoryId).not.toBeNull();
+    });
+
+    it('multiple real transitions (including a reversal) accumulate as evidence and are reflected in the description, never inventing a transition that did not happen', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const { entity } = await createDecision(db, userId, { name: name('Reversed Decision') });
+      await updateDecision(db, userId, entity.id, { status: 'decided', outcome: 'Chose option A' });
+      await updateDecision(db, userId, entity.id, { status: 'reversed' });
+
+      await rebuildInsights(db, userId, now);
+      const insights = await getCurrentInsights(db, userId);
+      const insight = insights.find((i) => i.insightType === 'decision_evolution' && i.subjectEntityId === entity.id);
+      expect(insight).toBeTruthy();
+      expect(insight!.observationCount).toBe(2);
+      expect(insight!.description).toContain('open → decided → reversed');
+
+      const { evidence } = await getInsightEvidence(db, userId, insight!.id);
+      expect(evidence).toHaveLength(2);
+      expect(evidence.every((e) => e.evidenceType === 'decision_history' && e.decisionHistoryId !== null)).toBe(true);
+    });
+
+    it('a no-op patch on a decision never inflates its evolution insight — decision_history itself never gains a row, so neither does the insight', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const { entity } = await createDecision(db, userId, { name: name('No-Op Decision'), status: 'decided', outcome: 'Kept as is' });
+      // Deliberately omits `status` — decisions.service.ts's updateDecision
+      // always re-stamps decidedAt to now() when status='decided' is
+      // resent without an explicit decidedAt (Phase 26 behavior), which
+      // would make this a real change rather than a true no-op.
+      await updateDecision(db, userId, entity.id, { outcome: 'Kept as is' });
+
+      await rebuildInsights(db, userId, now);
+      const insights = await getCurrentInsights(db, userId);
+      expect(insights.some((i) => i.insightType === 'decision_evolution' && i.subjectEntityId === entity.id)).toBe(false);
+    });
+
+    it('repeated rebuilds against unchanged decision history are stable — no duplicate insight or evidence rows', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const { entity } = await createDecision(db, userId, { name: name('Stable Rebuild Decision') });
+      await updateDecision(db, userId, entity.id, { status: 'decided', outcome: 'Chose option A' });
+
+      await rebuildInsights(db, userId, now);
+      await rebuildInsights(db, userId, now);
+      await rebuildInsights(db, userId, now);
+
+      const insights = (await getCurrentInsights(db, userId)).filter(
+        (i) => i.insightType === 'decision_evolution' && i.subjectEntityId === entity.id,
+      );
+      expect(insights).toHaveLength(1);
+
+      const { evidence } = await getInsightEvidence(db, userId, insights[0]!.id);
+      expect(evidence).toHaveLength(1);
+    });
+
+    it('cross-user isolation: another user\'s decision history never contributes to this user\'s decision_evolution insights or evidence', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const { entity: otherDecision } = await createDecision(db, otherUserId, { name: name('Other User Decision') });
+      await updateDecision(db, otherUserId, otherDecision.id, { status: 'decided', outcome: 'Other user outcome' });
+
+      await rebuildInsights(db, userId, now);
+      const myInsights = await getCurrentInsights(db, userId);
+      expect(myInsights.some((i) => i.subjectEntityId === otherDecision.id)).toBe(false);
+
+      await rebuildInsights(db, otherUserId, now);
+      const theirInsight = (await getCurrentInsights(db, otherUserId)).find(
+        (i) => i.insightType === 'decision_evolution' && i.subjectEntityId === otherDecision.id,
+      );
+      expect(theirInsight).toBeTruthy();
+      await expect(getInsightEvidence(db, userId, theirInsight!.id)).rejects.toThrow(InsightError);
     });
   });
 

@@ -5,6 +5,7 @@ import {
   buildPriorityTensionCandidates,
   buildRelationshipTensionCandidates,
   buildCrossInsightCandidates,
+  buildDecisionEvolutionCandidates,
 } from '../src/modules/insights/insightsEngine.js';
 import { selectRelatedFacts } from '../src/modules/insights/insightsService.js';
 import type {
@@ -12,6 +13,8 @@ import type {
   RawRelationship,
   RawRelationshipEvidence,
   SourceInsightForSynthesis,
+  RawDecisionForEvolution,
+  RawDecisionHistoryRow,
 } from '../src/modules/insights/insightsEngine.js';
 import {
   computeNeglectedGoalConfidence,
@@ -19,6 +22,7 @@ import {
   computePriorityTensionConfidence,
   computeRelationshipTensionConfidence,
   computeCrossInsightConfidence,
+  computeDecisionEvolutionConfidence,
 } from '../src/modules/insights/confidence.js';
 import {
   computeNeglectedGoalTemporalState,
@@ -27,6 +31,7 @@ import {
   computeRelationshipTensionTemporalState,
   isRelationshipTensionResolved,
   computeCrossInsightTemporalState,
+  computeDecisionEvolutionTemporalState,
 } from '../src/modules/insights/temporal.js';
 import {
   NEGLECTED_GOAL_STALENESS_DAYS,
@@ -38,6 +43,8 @@ import {
   CROSS_INSIGHT_STABLE_DAYS,
   MAX_SYNTHESIS_SOURCE_AGE_DAYS,
   MIN_SYNTHESIS_SOURCE_CONFIDENCE,
+  DECISION_EVOLUTION_RECURRING_TRANSITIONS,
+  DECISION_EVOLUTION_STABLE_DAYS,
 } from '../src/modules/insights/categories.js';
 
 const NOW = new Date('2026-06-01T00:00:00.000Z');
@@ -1024,6 +1031,122 @@ describe('buildCrossInsightCandidates', () => {
     const entityNames = new Map([['sharedEntityId', 'Shared Name']]);
     const candidates = buildCrossInsightCandidates({ sources, entityNames }, NOW);
     expect(candidates).toHaveLength(1);
+  });
+});
+
+describe('buildDecisionEvolutionCandidates (Phase 37)', () => {
+  function decision(overrides: Partial<RawDecisionForEvolution> & { entityId: string }): RawDecisionForEvolution {
+    return { name: 'Move to a remote-first team', ...overrides };
+  }
+
+  function historyRow(overrides: Partial<RawDecisionHistoryRow> & { entityId: string; id: string }): RawDecisionHistoryRow {
+    return {
+      previousStatus: 'open',
+      newStatus: 'decided',
+      previousOutcome: null,
+      newOutcome: 'Chose option A',
+      previousDecidedAt: null,
+      newDecidedAt: daysBefore(5),
+      changedAt: daysBefore(5),
+      ...overrides,
+    };
+  }
+
+  it('a decision with zero history rows produces no candidate — insufficient evidence, never fabricated', () => {
+    const candidates = buildDecisionEvolutionCandidates({ decisions: [decision({ entityId: 'd1' })], history: [] }, NOW);
+    expect(candidates).toEqual([]);
+  });
+
+  it('a decision with exactly one real transition qualifies (MIN_DECISION_HISTORY_ENTRIES = 1) — one real change is still real evidence', () => {
+    const candidates = buildDecisionEvolutionCandidates(
+      { decisions: [decision({ entityId: 'd1' })], history: [historyRow({ entityId: 'd1', id: 'h1' })] },
+      NOW,
+    );
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]!.insightType).toBe('decision_evolution');
+    expect(candidates[0]!.subjectKey).toBe('d1');
+    expect(candidates[0]!.subjectEntityId).toBe('d1');
+    expect(candidates[0]!.observationCount).toBe(1);
+    expect(candidates[0]!.evidence).toEqual([
+      {
+        evidenceType: 'decision_history',
+        decisionHistoryId: 'h1',
+        text: 'status changed from open to decided, outcome updated, decided date updated',
+        observedAt: daysBefore(5),
+      },
+    ]);
+  });
+
+  it('an unrelated decision with no history rows does not contaminate another decision’s candidate', () => {
+    const candidates = buildDecisionEvolutionCandidates(
+      {
+        decisions: [decision({ entityId: 'd1' }), decision({ entityId: 'd2', name: 'Unrelated decision' })],
+        history: [historyRow({ entityId: 'd1', id: 'h1' })],
+      },
+      NOW,
+    );
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]!.subjectKey).toBe('d1');
+  });
+
+  it('multiple real transitions accumulate in chronological order and produce one insight with all of them as evidence', () => {
+    const candidates = buildDecisionEvolutionCandidates(
+      {
+        decisions: [decision({ entityId: 'd1' })],
+        history: [
+          historyRow({ entityId: 'd1', id: 'h2', previousStatus: 'decided', newStatus: 'reversed', changedAt: daysBefore(1) }),
+          historyRow({ entityId: 'd1', id: 'h1', previousStatus: 'open', newStatus: 'decided', changedAt: daysBefore(10) }),
+        ],
+      },
+      NOW,
+    );
+    expect(candidates).toHaveLength(1);
+    const c = candidates[0]!;
+    expect(c.observationCount).toBe(2);
+    expect(c.evidence.map((e) => (e as { decisionHistoryId: string }).decisionHistoryId)).toEqual(['h1', 'h2']);
+    expect(c.description).toContain('open → decided → reversed');
+    expect(c.firstObservedAt).toEqual(daysBefore(10));
+    expect(c.lastObservedAt).toEqual(daysBefore(1));
+  });
+
+  it('never invents evidence beyond real decision_history rows — evidence count always matches transition count (up to the cap)', () => {
+    const rows = Array.from({ length: 3 }, (_, i) => historyRow({ entityId: 'd1', id: `h${i}`, changedAt: daysBefore(10 - i) }));
+    const candidates = buildDecisionEvolutionCandidates({ decisions: [decision({ entityId: 'd1' })], history: rows }, NOW);
+    expect(candidates[0]!.evidence).toHaveLength(3);
+  });
+});
+
+describe('computeDecisionEvolutionConfidence (Phase 37)', () => {
+  it('more real transitions yields higher confidence, capped below full certainty', () => {
+    const one = computeDecisionEvolutionConfidence({ transitionCount: 1, hasReversal: false });
+    const three = computeDecisionEvolutionConfidence({ transitionCount: 3, hasReversal: false });
+    expect(three).toBeGreaterThan(one);
+    expect(three).toBeLessThan(1);
+  });
+
+  it('an explicit reversal boosts confidence over an equivalent non-reversal change', () => {
+    const withoutReversal = computeDecisionEvolutionConfidence({ transitionCount: 1, hasReversal: false });
+    const withReversal = computeDecisionEvolutionConfidence({ transitionCount: 1, hasReversal: true });
+    expect(withReversal).toBeGreaterThan(withoutReversal);
+  });
+
+  it('is always within [0, 1]', () => {
+    expect(computeDecisionEvolutionConfidence({ transitionCount: 50, hasReversal: true })).toBeLessThanOrEqual(1);
+    expect(computeDecisionEvolutionConfidence({ transitionCount: 0, hasReversal: false })).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('computeDecisionEvolutionTemporalState (Phase 37)', () => {
+  it('a decision reconsidered >= DECISION_EVOLUTION_RECURRING_TRANSITIONS times is "recurring" regardless of age', () => {
+    expect(computeDecisionEvolutionTemporalState(DECISION_EVOLUTION_RECURRING_TRANSITIONS, NOW, NOW)).toBe('recurring');
+  });
+
+  it('below the recurring threshold, a recent transition is "emerging"', () => {
+    expect(computeDecisionEvolutionTemporalState(1, daysBefore(1), NOW)).toBe('emerging');
+  });
+
+  it('below the recurring threshold, an old transition is "stable"', () => {
+    expect(computeDecisionEvolutionTemporalState(1, daysBefore(DECISION_EVOLUTION_STABLE_DAYS + 1), NOW)).toBe('stable');
   });
 });
 

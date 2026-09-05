@@ -21,6 +21,7 @@ const EVIDENCE_TYPE_LABEL: Record<string, string> = {
   relationship: 'From a connection Twin tracked',
   personal_model_fact: 'From your Personal Model',
   insight: 'From another pattern Twin noticed',
+  decision_history: 'From this decision’s recorded history',
 };
 
 /**

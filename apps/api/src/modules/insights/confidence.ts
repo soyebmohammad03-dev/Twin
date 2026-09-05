@@ -135,3 +135,23 @@ export function computeCrossInsightConfidence(input: { sourceConfidences: number
   const base = weakest * anchorMultiplier * 0.8 + sourceCountBonus;
   return Math.max(0, Math.min(1, base));
 }
+
+/**
+ * Confidence for a decision_evolution insight — every underlying
+ * decision_history row is a real, explicit user action (Phase 36), so
+ * this is deliberately the most directly-observed confidence formula
+ * in this file (no epistemic discount, unlike relationship_tension):
+ * there is no ambiguity about whether the transition happened.
+ *
+ *  - transitionCount: more real transitions is a stronger "this
+ *    decision genuinely evolved" signal than exactly one recorded
+ *    change, capped so it can't alone reach full certainty.
+ *  - hasReversal: a decision that was explicitly reversed at some
+ *    point is a qualitatively stronger evolution signal than one whose
+ *    outcome was merely edited — reversing is the most deliberate,
+ *    unambiguous kind of decision change a user can record.
+ */
+export function computeDecisionEvolutionConfidence(input: { transitionCount: number; hasReversal: boolean }): number {
+  const base = Math.min(0.4 + 0.15 * input.transitionCount, 0.85);
+  return Math.max(0, Math.min(1, input.hasReversal ? Math.min(base + 0.1, 0.95) : base));
+}

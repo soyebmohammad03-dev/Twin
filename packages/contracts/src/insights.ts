@@ -37,6 +37,7 @@ export const insightTypeSchema = z.enum([
   'priority_tension',
   'relationship_tension',
   'cross_insight',
+  'decision_evolution',
 ]);
 export type InsightType = z.infer<typeof insightTypeSchema>;
 
@@ -67,7 +68,7 @@ export const insightTemporalStateSchema = z.enum(['emerging', 'recurring', 'stab
 export type InsightTemporalState = z.infer<typeof insightTemporalStateSchema>;
 
 /** 'insight' (Phase 14) points at a CONTRIBUTING first-order insight a cross_insight synthesizes — see insightEvidenceDtoSchema's sourceInsightId. */
-export const insightEvidenceTypeSchema = z.enum(['memory', 'entity', 'relationship', 'personal_model_fact', 'insight']);
+export const insightEvidenceTypeSchema = z.enum(['memory', 'entity', 'relationship', 'personal_model_fact', 'insight', 'decision_history']);
 export type InsightEvidenceType = z.infer<typeof insightEvidenceTypeSchema>;
 
 export const insightDtoSchema = z.object({
@@ -113,6 +114,7 @@ export const insightEvidenceDtoSchema = z.object({
   relationshipId: z.string().uuid().nullable(),
   personalModelFactId: z.string().uuid().nullable(),
   sourceInsightId: z.string().uuid().nullable(),
+  decisionHistoryId: z.string().uuid().nullable(),
   evidenceText: z.string().nullable(),
   observedAt: z.string(),
   createdAt: z.string(),

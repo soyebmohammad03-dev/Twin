@@ -20,6 +20,7 @@ export const INSIGHT_TYPES: readonly InsightType[] = [
   'priority_tension',
   'relationship_tension',
   'cross_insight',
+  'decision_evolution',
 ];
 
 // ---------------------------------------------------------------------------
@@ -115,3 +116,27 @@ export const MAX_EVIDENCE_MEMORIES_PER_RELATIONSHIP_SIDE = 3;
  * existing 30-day heuristic — not independently tuned.
  */
 export const RELATIONSHIP_TENSION_RESOLUTION_DAYS = 30;
+
+// ---------------------------------------------------------------------------
+// Phase 37: decision_evolution — derived directly from decision_history
+// (packages/db/src/schema/decisionHistory.ts), Phase 36's append-only
+// record of a decision's real status/outcome/decidedAt transitions.
+// Every row there is a genuine user-triggered change, never inferred —
+// so a single real transition is already sufficient evidence that a
+// decision "evolved," unlike e.g. neglected_goal's absence-based signal.
+// ---------------------------------------------------------------------------
+
+/** A decision needs at least this many real recorded transitions to qualify — decision_history only ever contains genuine transitions (Phase 36), so even one is real evidence of evolution. */
+export const MIN_DECISION_HISTORY_ENTRIES = 1;
+
+/** A rebuild scans a bounded slice of a user's decisions, not their entire history — same bounding spirit as MAX_GOALS_SCANNED. */
+export const MAX_DECISIONS_SCANNED = 200;
+
+/** How many of a decision's most-recent history rows are attached as evidence per insight — bounds evidence size for a decision with a long transition history, same spirit as MAX_EVIDENCE_MEMORIES_PER_INSIGHT. */
+export const MAX_EVIDENCE_HISTORY_PER_INSIGHT = 5;
+
+/** A decision with at least this many real transitions reads as 'recurring' (repeatedly reconsidered) regardless of age — a structural signal, not an age-based one. */
+export const DECISION_EVOLUTION_RECURRING_TRANSITIONS = 3;
+
+/** Below the recurring threshold, a decision whose most recent transition is at least this many days old reads as 'stable' rather than 'emerging' (just changed). */
+export const DECISION_EVOLUTION_STABLE_DAYS = 14;

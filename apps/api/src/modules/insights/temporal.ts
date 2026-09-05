@@ -5,6 +5,8 @@ import {
   RELATIONSHIP_TENSION_STABLE_DAYS,
   RELATIONSHIP_TENSION_RESOLUTION_DAYS,
   CROSS_INSIGHT_STABLE_DAYS,
+  DECISION_EVOLUTION_RECURRING_TRANSITIONS,
+  DECISION_EVOLUTION_STABLE_DAYS,
 } from './categories.js';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -107,4 +109,20 @@ export type CrossInsightTemporalState = 'emerging' | 'stable';
 export function computeCrossInsightTemporalState(firstObservedAt: Date, now: Date): CrossInsightTemporalState {
   const ageDays = (now.getTime() - firstObservedAt.getTime()) / MS_PER_DAY;
   return ageDays >= CROSS_INSIGHT_STABLE_DAYS ? 'stable' : 'emerging';
+}
+
+/**
+ * The three temporalState values a decision_evolution insight can
+ * produce. 'recurring' is a purely structural signal (a real transition
+ * COUNT threshold, not age) — a decision reconsidered three or more
+ * times is repeatedly, actively unsettled regardless of when. Below
+ * that, 'emerging'/'stable' are age-based on the most recent transition,
+ * same shape as priority_tension's.
+ */
+export type DecisionEvolutionTemporalState = 'emerging' | 'recurring' | 'stable';
+
+export function computeDecisionEvolutionTemporalState(transitionCount: number, lastObservedAt: Date, now: Date): DecisionEvolutionTemporalState {
+  if (transitionCount >= DECISION_EVOLUTION_RECURRING_TRANSITIONS) return 'recurring';
+  const ageDays = (now.getTime() - lastObservedAt.getTime()) / MS_PER_DAY;
+  return ageDays >= DECISION_EVOLUTION_STABLE_DAYS ? 'stable' : 'emerging';
 }

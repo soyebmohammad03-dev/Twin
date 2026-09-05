@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
-import { entities, goals, memoryEntities, memories, type Queryable } from '@twin/db';
+import { decisionHistory, entities, goals, memoryEntities, memories, type Queryable } from '@twin/db';
 import type { InsightType, InsightStatusClass, InsightTemporalState, EpistemicStatus } from '@twin/contracts';
 import {
   MAX_GOALS_SCANNED,
@@ -16,6 +16,9 @@ import {
   MAX_SYNTHESIS_SOURCES,
   MAX_SYNTHESIS_SOURCE_AGE_DAYS,
   MIN_SYNTHESIS_SOURCE_CONFIDENCE,
+  MIN_DECISION_HISTORY_ENTRIES,
+  MAX_DECISIONS_SCANNED,
+  MAX_EVIDENCE_HISTORY_PER_INSIGHT,
 } from './categories.js';
 import {
   computeNeglectedGoalConfidence,
@@ -23,6 +26,7 @@ import {
   computePriorityTensionConfidence,
   computeRelationshipTensionConfidence,
   computeCrossInsightConfidence,
+  computeDecisionEvolutionConfidence,
 } from './confidence.js';
 import {
   computeNeglectedGoalTemporalState,
@@ -31,6 +35,7 @@ import {
   computeRelationshipTensionTemporalState,
   isRelationshipTensionResolved,
   computeCrossInsightTemporalState,
+  computeDecisionEvolutionTemporalState,
 } from './temporal.js';
 import { getCurrentModel } from '../personalModel/personalModelService.js';
 import { detectRelationshipConflicts } from '../personalModel/conflicts.js';
@@ -60,7 +65,8 @@ export type EvidenceItem =
   | { evidenceType: 'memory'; memoryId: string; text: string | null; observedAt: Date; supersededAt?: Date | null }
   | { evidenceType: 'personal_model_fact'; personalModelFactId: string; text: string | null; observedAt: Date }
   | { evidenceType: 'relationship'; relationshipId: string; text: string | null; observedAt: Date; supersededAt?: Date | null }
-  | { evidenceType: 'insight'; sourceInsightId: string; text: string | null; observedAt: Date };
+  | { evidenceType: 'insight'; sourceInsightId: string; text: string | null; observedAt: Date }
+  | { evidenceType: 'decision_history'; decisionHistoryId: string; text: string | null; observedAt: Date };
 
 /** The generic candidate shape every insight detector produces — generalized from Phase 10's NeglectedGoalCandidate. */
 export interface InsightCandidate {
@@ -603,6 +609,137 @@ export async function computeRelationshipTensionInsights(db: Queryable, userId: 
 }
 
 // ---------------------------------------------------------------------------
+// decision_evolution — Phase 37. Derived directly from decision_history
+// (Phase 36's append-only record of a decision's real status/outcome/
+// decidedAt transitions) — every row there is a genuine user-triggered
+// change, never inferred, so this is the most directly-observed
+// detector in this file.
+// ---------------------------------------------------------------------------
+
+export interface RawDecisionForEvolution {
+  entityId: string;
+  name: string;
+}
+
+export interface RawDecisionHistoryRow {
+  entityId: string;
+  id: string;
+  previousStatus: string;
+  newStatus: string;
+  previousOutcome: string | null;
+  newOutcome: string | null;
+  previousDecidedAt: Date | null;
+  newDecidedAt: Date | null;
+  changedAt: Date;
+}
+
+/** A real, templated (never fabricated) one-line description of exactly what changed in this transition — mirrors the frontend's own DecisionDetailModal history rendering. */
+function describeDecisionTransition(row: RawDecisionHistoryRow): string {
+  const parts: string[] = [];
+  if (row.previousStatus !== row.newStatus) parts.push(`status changed from ${row.previousStatus} to ${row.newStatus}`);
+  if (row.previousOutcome !== row.newOutcome) parts.push('outcome updated');
+  if (row.previousDecidedAt?.getTime() !== row.newDecidedAt?.getTime()) parts.push('decided date updated');
+  return parts.length > 0 ? parts.join(', ') : 'updated';
+}
+
+/**
+ * Pure — takes the already-fetched decision + history rows (no DB
+ * access), directly unit testable, same shape as every other detector's
+ * builder above. A decision qualifies once it has at least
+ * MIN_DECISION_HISTORY_ENTRIES real recorded transitions — since
+ * decision_history is append-only and Phase 36's updateDecision only
+ * ever writes a row for a GENUINE status/outcome/decidedAt change,
+ * there is no fabrication risk even at the minimum threshold of 1.
+ */
+export function buildDecisionEvolutionCandidates(
+  input: { decisions: RawDecisionForEvolution[]; history: RawDecisionHistoryRow[] },
+  now: Date,
+): InsightCandidate[] {
+  const historyByDecision = new Map<string, RawDecisionHistoryRow[]>();
+  for (const h of input.history) {
+    const list = historyByDecision.get(h.entityId) ?? [];
+    list.push(h);
+    historyByDecision.set(h.entityId, list);
+  }
+
+  const candidates: InsightCandidate[] = [];
+  for (const decision of input.decisions) {
+    const rows = (historyByDecision.get(decision.entityId) ?? []).sort((a, b) => a.changedAt.getTime() - b.changedAt.getTime());
+    if (rows.length < MIN_DECISION_HISTORY_ENTRIES) continue;
+
+    const firstObservedAt = rows[0]!.changedAt;
+    const lastObservedAt = rows[rows.length - 1]!.changedAt;
+    const hasReversal = rows.some((r) => r.newStatus === 'reversed');
+
+    const chain = [rows[0]!.previousStatus, ...rows.map((r) => r.newStatus)].join(' → ');
+    const description = `"${decision.name}" has changed ${rows.length} time${rows.length === 1 ? '' : 's'}: ${chain}.`;
+
+    const evidence: EvidenceItem[] = rows.slice(0, MAX_EVIDENCE_HISTORY_PER_INSIGHT).map((r) => ({
+      evidenceType: 'decision_history',
+      decisionHistoryId: r.id,
+      text: describeDecisionTransition(r),
+      observedAt: r.changedAt,
+    }));
+
+    candidates.push({
+      insightType: 'decision_evolution',
+      subjectKey: decision.entityId,
+      statusClass: 'observed',
+      temporalState: computeDecisionEvolutionTemporalState(rows.length, lastObservedAt, now),
+      title: `"${decision.name}" has evolved over time`,
+      description,
+      confidence: computeDecisionEvolutionConfidence({ transitionCount: rows.length, hasReversal }),
+      subjectEntityId: decision.entityId,
+      firstObservedAt,
+      lastObservedAt,
+      observationCount: rows.length,
+      evidence,
+    });
+  }
+  return candidates;
+}
+
+/**
+ * DB-touching wrapper: bounded entity scan for the user's decisions,
+ * then ONE batched query for their decision_history rows (never
+ * per-decision) — no N+1. decision_history has no userId column of its
+ * own, but every row is only ever fetched via an entityId already
+ * scoped to `entities.userId = userId` above, so cross-user leakage is
+ * structurally impossible here regardless. Delegates to the pure
+ * builder above.
+ */
+export async function computeDecisionEvolutionInsights(db: Queryable, userId: string, now: Date = new Date()): Promise<InsightCandidate[]> {
+  const decisionRows = await db
+    .select({ entityId: entities.id, name: entities.name })
+    .from(entities)
+    .where(and(eq(entities.userId, userId), eq(entities.entityType, 'decision'), isNull(entities.archivedAt)))
+    .orderBy(desc(entities.createdAt))
+    .limit(MAX_DECISIONS_SCANNED);
+  const decisionEntityIds = decisionRows.map((d) => d.entityId);
+  if (decisionEntityIds.length === 0) return [];
+
+  const historyRows = await db.select().from(decisionHistory).where(inArray(decisionHistory.entityId, decisionEntityIds));
+
+  return buildDecisionEvolutionCandidates(
+    {
+      decisions: decisionRows,
+      history: historyRows.map((h) => ({
+        entityId: h.entityId,
+        id: h.id,
+        previousStatus: h.previousStatus,
+        newStatus: h.newStatus,
+        previousOutcome: h.previousOutcome,
+        newOutcome: h.newOutcome,
+        previousDecidedAt: h.previousDecidedAt,
+        newDecidedAt: h.newDecidedAt,
+        changedAt: h.changedAt,
+      })),
+    },
+    now,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Orchestrator
 // ---------------------------------------------------------------------------
 
@@ -620,10 +757,11 @@ export async function computeRelationshipTensionInsights(db: Queryable, userId: 
  * cross_insight this way.
  */
 export async function computeAllInsightCandidates(db: Queryable, userId: string, now: Date = new Date()): Promise<InsightCandidate[]> {
-  const [neglectedGoalCandidates, personalModelFacts, relationshipTensionCandidates] = await Promise.all([
+  const [neglectedGoalCandidates, personalModelFacts, relationshipTensionCandidates, decisionEvolutionCandidates] = await Promise.all([
     computeNeglectedGoalInsights(db, userId, now),
     getCurrentModel(db, userId),
     computeRelationshipTensionInsights(db, userId, now),
+    computeDecisionEvolutionInsights(db, userId, now),
   ]);
 
   const rawFacts: RawPersonalModelFact[] = personalModelFacts.map((f) => ({
@@ -645,6 +783,7 @@ export async function computeAllInsightCandidates(db: Queryable, userId: string,
     ...buildRecurringTopicCandidates(rawFacts, now),
     ...buildPriorityTensionCandidates(rawFacts, now),
     ...relationshipTensionCandidates,
+    ...decisionEvolutionCandidates,
   ];
 }
 
@@ -679,6 +818,7 @@ const SOURCE_TYPE_LABEL: Partial<Record<InsightType, string>> = {
   recurring_topic: 'a recurring topic',
   priority_tension: 'a priority tension',
   relationship_tension: 'a relationship tension',
+  decision_evolution: 'a decision that evolved over time',
 };
 
 function normalizeAnchorText(raw: string): string {

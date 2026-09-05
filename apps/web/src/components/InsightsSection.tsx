@@ -29,6 +29,7 @@ export const INSIGHT_TYPE_ICON: Record<InsightDto['insightType'], string> = {
   priority_tension: 'balance',
   relationship_tension: 'hub',
   cross_insight: 'workspaces',
+  decision_evolution: 'history',
 };
 
 const TEMPORAL_LABEL: Partial<Record<string, string>> = {

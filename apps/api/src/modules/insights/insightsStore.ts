@@ -328,6 +328,33 @@ async function writeInsightEvidence(db: Queryable, userId: string, insightId: st
           .set({ supersededAt: item.supersededAt ?? null })
           .where(eq(insightEvidence.id, existing.id));
       }
+    } else if (item.evidenceType === 'decision_history') {
+      // Phase 37: a decision_evolution insight's per-transition
+      // evidence, pointing at a real, immutable decision_history row.
+      // No supersededAt tracking, unlike relationship_tension's sides:
+      // each row is a distinct historical fact that never gets
+      // superseded by a later one — they simply accumulate.
+      const [existing] = await db
+        .select({ id: insightEvidence.id })
+        .from(insightEvidence)
+        .where(
+          and(
+            eq(insightEvidence.insightId, insightId),
+            eq(insightEvidence.evidenceType, 'decision_history'),
+            eq(insightEvidence.decisionHistoryId, item.decisionHistoryId),
+          ),
+        )
+        .limit(1);
+      if (!existing) {
+        await db.insert(insightEvidence).values({
+          userId,
+          insightId,
+          evidenceType: 'decision_history',
+          decisionHistoryId: item.decisionHistoryId,
+          evidenceText: item.text,
+          observedAt: item.observedAt,
+        });
+      }
     } else if (item.evidenceType === 'insight') {
       // Phase 14: a cross_insight's evidence — one row per contributing
       // first-order source, pointing at its REAL insight id (resolved
