@@ -1,0 +1,17 @@
+export const INITIAL_USER = {
+  name: 'Alex Rivera',
+  displayName: 'Alex',
+  handle: '@alexrivera',
+  email: 'alex.rivera@twin.ai',
+  role: 'Principal Product Architect',
+  location: 'San Francisco, CA',
+  timezone: 'Pacific Time (UTC-7)',
+  tier: 'Twin Pro Neural',
+  accountStatus: 'Active & Verified',
+  joinedDate: 'November 2023',
+  encryptionKeyId: 'TWIN-SEC-4902-NX',
+  connectedDevices: 3,
+  avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDZ2goSjf1eY3BGLQ267e4dn7A6wFu6gg6vx0Xf1780XnGtK8A7FwlducCjJddfSxr3OR2_iLHZGE0LRlPKzM8SB-xcth_jTfQrtB7zIuWaJBNoRWTwBOeJvbjh3WriKa0uNM5w6Q1fncld1Q6Uv-LAeBe1zXJm6bPDqeAuT7igcaJcOX0FBXq3ooAtJxmcmgF6L-pe8m8nC4zZWGgufeVO48fMDJkVthNeoNX0adgVV066ch_3B6q6YA',
+  lightAvatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD7feXIIM6iXGZtk0Aq-rZvn6gKZi7KSGBDmtTfyCYbg4Vr50wDw08OW5hQdFokvnP0_Dg_IXBPCeYOaw3iLggTMHZs56HvjwxYAGsBhB9VR7NoEmBCdRx0Zc4io_7i0ZTES-8wDbQa2AWmKtNBOu-hd0TgQx05T7odFdy5WWRBkJJBnZLfA6MAjcpsNbICGJpvA4b7S_G2qjhNN5IiWij15NqRlh1epmORjdeo9bcIjhtz0_Z_Ye5cgw',
+  twinSymbolUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDH3-ddjDQMgL7Dst1ulErz8ZlCJ34RJ7VZfVf_6JndUCzz9aRaUeEaHEKyhd7dBq9gPZdu8gygyJ6LiuQ8WugoIic-TuH5Ou5Haa6ZAk1L7QlSw2vYJdQWk0CM96lp5VEUwre11tkvyIaUf5yG6SRXCLgM5WQ8pjncP6uCfbWkcSJuE7DmlWPZE2pVPLX4zHmYftydn809hRRCnA0HBRhWdl6f8fwNxHQ66OpWGPwIRwscAoCtHxbAoA',
+};

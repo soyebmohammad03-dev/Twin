@@ -1,0 +1,118 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788379757970,
+      "tag": "0000_fast_sunset_bain",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788381949760,
+      "tag": "0001_loving_baron_zemo",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788423624681,
+      "tag": "0002_bumpy_thunderbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788427081216,
+      "tag": "0003_dear_sprite",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788437592551,
+      "tag": "0004_concerned_edwin_jarvis",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788437604741,
+      "tag": "0005_vector_and_fts_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788437725629,
+      "tag": "0006_magical_yellowjacket",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788441749425,
+      "tag": "0007_large_sway",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788441867018,
+      "tag": "0008_entity_name_normalization_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788450474683,
+      "tag": "0009_strange_may_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788454024376,
+      "tag": "0010_mushy_black_crow",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788466442323,
+      "tag": "0011_adorable_unus",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788467400000,
+      "tag": "0012_insight_evidence_entity_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788468000000,
+      "tag": "0013_insight_evidence_pmfact_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788470000000,
+      "tag": "0014_insight_evidence_relationship_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788510000000,
+      "tag": "0015_insight_evidence_cross_insight",
+      "breakpoints": true
+    }
+  ]
+}

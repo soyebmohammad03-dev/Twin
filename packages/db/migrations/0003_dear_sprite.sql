@@ -1,0 +1,1 @@
+ALTER TABLE "ingestion_jobs" ADD COLUMN "extraction_result" jsonb;

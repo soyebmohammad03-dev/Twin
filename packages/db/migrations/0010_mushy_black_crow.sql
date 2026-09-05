@@ -1,0 +1,1 @@
+ALTER TABLE "personal_model_fact_evidence" ADD COLUMN "superseded_at" timestamp with time zone;
