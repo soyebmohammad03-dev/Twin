@@ -18,7 +18,11 @@ export async function authorizedFetch(path: string, init: RequestInit = {}, isRe
     ...init,
     credentials: 'include',
     headers: {
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      // FormData (e.g. ingestionApi.uploadDocument) must NOT get an
+      // explicit Content-Type — the browser sets its own multipart
+      // boundary automatically, and overriding it here would corrupt
+      // the request.
+      ...(init.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },

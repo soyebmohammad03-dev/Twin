@@ -110,11 +110,19 @@ async function resolveInput(input: CreateIngestionRequest): Promise<ResolvedInpu
       };
 
     case 'document':
-      // No document parsing is implemented — same reasoning as image.
+      // Phase 42: `description` is either (a) the user's own manual
+      // account of a document (the original, pre-Phase-42 path — stays
+      // 'explicit', unchanged) or (b) real, already-extracted PDF text
+      // supplied by POST /ingestion/documents (see documentExtract.ts),
+      // which always overrides epistemicStatus to 'from_source' when it
+      // calls this same ingest() function — the content genuinely came
+      // from an external document, not something the user is personally
+      // asserting, exactly like web_link's page-fetch case above.
       return {
         content: input.description,
         sourceType: 'document',
         sourceTitle: input.title,
+        sourceRawContent: input.description,
         defaultEpistemicStatus: 'explicit',
         defaultMemoryType: 'document_excerpt',
       };

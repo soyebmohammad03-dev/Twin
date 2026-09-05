@@ -1,26 +1,59 @@
 import React, { useState } from 'react';
 import { MemoryCategory, MemoryItem } from '../types';
+import { ingestionApi } from '../services/ingestionApi';
+import { toMemoryItem } from '../services/memoryMapper';
 
 interface CaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveMemory: (newMem: Omit<MemoryItem, 'id'>) => void;
+  /** Phase 42: called after a real document upload/extraction completes with a genuinely new (non-duplicate) memory. */
+  onDocumentIngested?: (mem: MemoryItem) => void;
 }
+
+type DocumentUploadState =
+  | { status: 'idle' }
+  | { status: 'uploading' }
+  | { status: 'success'; isDuplicate: boolean; title: string | null }
+  | { status: 'error'; message: string };
 
 export const CaptureModal: React.FC<CaptureModalProps> = ({
   isOpen,
   onClose,
   onSaveMemory,
+  onDocumentIngested,
 }) => {
-  const [activeType, setActiveType] = useState<'thought' | 'voice' | 'decision'>('thought');
+  const [activeType, setActiveType] = useState<'thought' | 'voice' | 'decision' | 'document'>('thought');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<MemoryCategory>('ideas');
   const [tagsInput, setTagsInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [documentUpload, setDocumentUpload] = useState<DocumentUploadState>({ status: 'idle' });
 
   if (!isOpen) return null;
+
+  async function handleDocumentFile(file: File) {
+    if (file.type !== 'application/pdf') {
+      setDocumentUpload({ status: 'error', message: 'Unsupported file type — only PDF documents are currently supported.' });
+      return;
+    }
+    setDocumentUpload({ status: 'uploading' });
+    try {
+      const result = await ingestionApi.uploadDocument(file);
+      if (!result.memory) {
+        setDocumentUpload({ status: 'error', message: result.job.errorMessage ?? 'Could not extract text from this document.' });
+        return;
+      }
+      setDocumentUpload({ status: 'success', isDuplicate: result.job.isDuplicate, title: result.memory.source.title });
+      if (!result.job.isDuplicate) {
+        onDocumentIngested?.(toMemoryItem(result.memory));
+      }
+    } catch (err) {
+      setDocumentUpload({ status: 'error', message: err instanceof Error ? err.message : 'Upload failed.' });
+    }
+  }
 
   const handleStartVoice = () => {
     setIsRecording(true);
@@ -91,7 +124,7 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
         </div>
 
         {/* Type Selector */}
-        <div className="grid grid-cols-3 gap-2 my-4">
+        <div className="grid grid-cols-4 gap-2 my-4">
           <button
             type="button"
             onClick={() => setActiveType('thought')}
@@ -136,7 +169,57 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
             <span className="material-symbols-outlined text-[16px]">gavel</span>
             <span>Decision</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveType('document');
+              setDocumentUpload({ status: 'idle' });
+            }}
+            className={`py-2 px-3 rounded-xl text-xs font-mono flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeType === 'document'
+                ? 'bg-indigo-600 dark:bg-[#c2c1ff] text-white dark:text-[#1c0b9f] font-semibold'
+                : 'liquid-glass text-slate-700 dark:text-slate-300'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">description</span>
+            <span>Document</span>
+          </button>
         </div>
+
+        {/* Document upload panel — real PDF text extraction, honest states, no simulated processing */}
+        {activeType === 'document' && (
+          <div className="rounded-2xl liquid-glass p-4 mb-4 border border-indigo-500/30 space-y-3">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Upload a PDF to extract its real text into a memory. Only PDFs with a real text layer are supported — no OCR yet.
+            </p>
+            <label className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-indigo-400/40 text-indigo-500 dark:text-indigo-300 text-xs font-mono cursor-pointer hover:border-indigo-400/70 transition-all">
+              <span className="material-symbols-outlined text-[18px]">upload_file</span>
+              <span>{documentUpload.status === 'uploading' ? 'Extracting…' : 'Choose a PDF file'}</span>
+              <input
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                disabled={documentUpload.status === 'uploading'}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) void handleDocumentFile(file);
+                }}
+              />
+            </label>
+            {documentUpload.status === 'success' && (
+              <p className="text-xs font-mono text-emerald-500">
+                {documentUpload.isDuplicate
+                  ? `Already in your memory: "${documentUpload.title ?? 'this document'}" — no duplicate created.`
+                  : `Extracted and saved "${documentUpload.title ?? 'document'}" to your memory.`}
+              </p>
+            )}
+            {documentUpload.status === 'error' && (
+              <p className="text-xs font-mono text-rose-500">{documentUpload.message}</p>
+            )}
+          </div>
+        )}
 
         {/* Voice Recording Simulation Panel */}
         {activeType === 'voice' && (
@@ -176,7 +259,18 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
           </div>
         )}
 
-        {/* Input Form */}
+        {activeType === 'document' ? (
+          <div className="pt-2 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2 rounded-full bg-indigo-600 dark:bg-[#c2c1ff] text-white dark:text-[#1c0b9f] text-xs font-semibold hover:opacity-90 transition-all shadow-md active:scale-95 cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
+        ) : (
+        /* Input Form */
         <form onSubmit={handleSave} className="space-y-3.5">
           <div>
             <label className="block text-xs font-mono text-slate-500 dark:text-slate-400 mb-1">
@@ -255,6 +349,7 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

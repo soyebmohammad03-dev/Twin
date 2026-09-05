@@ -4,6 +4,7 @@ import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import multipart from '@fastify/multipart';
 import {
   serializerCompiler,
   validatorCompiler,
@@ -42,6 +43,11 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   await app.register(cors, { origin: env.CORS_ORIGIN, credentials: true });
   await app.register(cookie);
+  // Phase 42: real file upload for PDF/document ingestion (POST
+  // /ingestion/documents) — bounded to the same 20MB ceiling
+  // documentExtract.ts itself enforces, checked again here so an
+  // oversized upload is rejected before it's ever buffered in memory.
+  await app.register(multipart, { limits: { fileSize: 20_000_000 } });
   await app.register(jwt, {
     secret: env.JWT_ACCESS_SECRET,
   });

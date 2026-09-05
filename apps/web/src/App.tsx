@@ -721,6 +721,7 @@ const TwinAppInner: React.FC = () => {
         isOpen={isCaptureOpen}
         onClose={() => setIsCaptureOpen(false)}
         onSaveMemory={handleSaveMemory}
+        onDocumentIngested={(mem) => setMemories((prev) => [mem, ...prev])}
       />
 
       <PrivacyModal

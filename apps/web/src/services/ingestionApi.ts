@@ -19,6 +19,21 @@ export const ingestionApi = {
     return parseOrThrow<IngestionResultDto>(response);
   },
 
+  /**
+   * Phase 42: uploads a real PDF for text extraction (POST
+   * /ingestion/documents) — the extracted text becomes a from_source
+   * document memory through the exact same ingestion pipeline every
+   * other input type uses. Rejects (via the server's honest 415/422)
+   * anything that isn't a real, parseable PDF; never fabricates content.
+   */
+  async uploadDocument(file: File, title?: string): Promise<IngestionResultDto> {
+    const formData = new FormData();
+    if (title) formData.set('title', title);
+    formData.set('file', file, file.name);
+    const response = await authorizedFetch('/ingestion/documents', { method: 'POST', body: formData });
+    return parseOrThrow<IngestionResultDto>(response);
+  },
+
   /** Phase 22 — the user's real ingestion job history (ProfileView's Ingestion Activity section). Was already fully built and tested server-side; simply never called from the frontend until now. */
   async list(params?: { status?: IngestionStatus }): Promise<IngestionJobDto[]> {
     const query = new URLSearchParams();

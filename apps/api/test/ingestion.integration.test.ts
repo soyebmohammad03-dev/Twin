@@ -1,6 +1,47 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
+import PDFDocument from 'pdfkit';
+
+/**
+ * Builds a real, valid PDF buffer via pdfkit — used only to produce a
+ * real document for extractPdfText/documentExtract.ts to parse; the
+ * test never hand-crafts or fakes extracted text itself.
+ */
+function makePdfBuffer(text: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument();
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    doc.text(text);
+    doc.end();
+  });
+}
+
+/** Hand-built multipart/form-data body — app.inject() doesn't have a built-in multipart helper. */
+function buildMultipartBody(
+  fields: Record<string, string>,
+  file?: { fieldName: string; filename: string; contentType: string; data: Buffer },
+): { body: Buffer; contentType: string } {
+  const boundary = `----twin-test-boundary-${Date.now()}`;
+  const parts: Buffer[] = [];
+  for (const [key, value] of Object.entries(fields)) {
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`));
+  }
+  if (file) {
+    parts.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${file.fieldName}"; filename="${file.filename}"\r\nContent-Type: ${file.contentType}\r\n\r\n`,
+      ),
+      file.data,
+      Buffer.from('\r\n'),
+    );
+  }
+  parts.push(Buffer.from(`--${boundary}--\r\n`));
+  return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
+}
 
 /**
  * Real database-backed ingestion tests, run against `twin_test` (see
@@ -79,6 +120,43 @@ describe('ingestion routes — real database', () => {
     expect(body.memory.epistemicStatus).toBe('explicit');
     expect(body.memory.confidence).toBe(1);
     expect(body.memory.source.sourceType).toBe('manual');
+  });
+
+  it('Phase 42: ingests a voice transcript end-to-end — real memory, correct provenance, retrievable via Context Engine', async () => {
+    const marker = `voice-marker-${Date.now()}`;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/ingestion',
+      headers: authHeader(),
+      payload: { type: 'voice_transcript', transcript: `Reminder to follow up with the vendor. ${marker}` },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.job.status).toBe('completed');
+    expect(body.job.inputType).toBe('voice_transcript');
+    expect(body.memory.content).toBe(`Reminder to follow up with the vendor. ${marker}`);
+    // The transcript is the user's own words (STT already happened upstream), never downgraded to inferred.
+    expect(body.memory.epistemicStatus).toBe('explicit');
+    expect(body.memory.source.sourceType).toBe('voice_note');
+    expect(body.memory.source.rawContent).toBe(`Reminder to follow up with the vendor. ${marker}`);
+
+    const contextResponse = await app.inject({
+      method: 'POST',
+      url: '/context',
+      headers: authHeader(),
+      payload: { query: marker },
+    });
+    expect(contextResponse.statusCode).toBe(200);
+    expect(contextResponse.json().memories.some((m: { memoryId: string }) => m.memoryId === body.memory.id)).toBe(true);
+  });
+
+  it('Phase 42: a duplicate voice transcript is detected the same way as any other input type', async () => {
+    const transcript = `Duplicate voice transcript check ${Date.now()}`;
+    const first = await app.inject({ method: 'POST', url: '/ingestion', headers: authHeader(), payload: { type: 'voice_transcript', transcript } });
+    const second = await app.inject({ method: 'POST', url: '/ingestion', headers: authHeader(), payload: { type: 'voice_transcript', transcript } });
+    expect(second.json().job.isDuplicate).toBe(true);
+    expect(second.json().memory.id).toBe(first.json().memory.id);
   });
 
   it('GET /ingestion/:id returns the same job + memory after the fact', async () => {
@@ -239,6 +317,188 @@ describe('ingestion routes — real database', () => {
     expect(body.job.status).toBe('failed');
     expect(body.job.errorMessage).toMatch(/private|internal|localhost/i);
     expect(body.memory).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Phase 42 — real PDF document ingestion (POST /ingestion/documents)
+  // -------------------------------------------------------------------------
+
+  describe('POST /ingestion/documents — real PDF text extraction', () => {
+    it('extracts real text from an uploaded PDF and stores it as a from_source document memory', async () => {
+      const marker = `pdf-marker-${Date.now()}`;
+      const pdfText = `This is a real Twin test document. ${marker} appears here as genuine extracted content.`;
+      const pdf = await makePdfBuffer(pdfText);
+      const { body, contentType } = buildMultipartBody(
+        {},
+        { fieldName: 'file', filename: 'test.pdf', contentType: 'application/pdf', data: pdf },
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/ingestion/documents',
+        headers: { ...authHeader(), 'content-type': contentType },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(201);
+      const result = response.json();
+      expect(result.job.status).toBe('completed');
+      expect(result.memory.source.sourceType).toBe('document');
+      expect(result.memory.epistemicStatus).toBe('from_source');
+      expect(result.memory.content).toContain(marker);
+      expect(result.memory.source.rawContent).toContain(marker);
+      expect(result.memory.source.title).toBe('test.pdf');
+    });
+
+    it('an optional title field overrides the filename', async () => {
+      const pdf = await makePdfBuffer('Titled document content for the override test.');
+      const { body, contentType } = buildMultipartBody(
+        { title: 'My Custom Document Title' },
+        { fieldName: 'file', filename: 'ignored.pdf', contentType: 'application/pdf', data: pdf },
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/ingestion/documents',
+        headers: { ...authHeader(), 'content-type': contentType },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json().memory.source.title).toBe('My Custom Document Title');
+    });
+
+    it('duplicate detection: uploading the same document content twice never creates a second memory', async () => {
+      const pdf = await makePdfBuffer(`Duplicate document check ${Date.now()}.`);
+      const { body: body1, contentType: ct1 } = buildMultipartBody(
+        {},
+        { fieldName: 'file', filename: 'first.pdf', contentType: 'application/pdf', data: pdf },
+      );
+      const first = await app.inject({ method: 'POST', url: '/ingestion/documents', headers: { ...authHeader(), 'content-type': ct1 }, payload: body1 });
+      expect(first.statusCode).toBe(201);
+      const firstMemoryId = first.json().memory.id;
+
+      const { body: body2, contentType: ct2 } = buildMultipartBody(
+        {},
+        { fieldName: 'file', filename: 'second.pdf', contentType: 'application/pdf', data: pdf },
+      );
+      const second = await app.inject({ method: 'POST', url: '/ingestion/documents', headers: { ...authHeader(), 'content-type': ct2 }, payload: body2 });
+      expect(second.statusCode).toBe(201);
+      const secondResult = second.json();
+      expect(secondResult.job.isDuplicate).toBe(true);
+      expect(secondResult.memory.id).toBe(firstMemoryId);
+    });
+
+    it('rejects a non-PDF file with an honest 415, never fabricating extracted text', async () => {
+      const { body, contentType } = buildMultipartBody(
+        {},
+        { fieldName: 'file', filename: 'note.txt', contentType: 'text/plain', data: Buffer.from('plain text file') },
+      );
+      const response = await app.inject({
+        method: 'POST',
+        url: '/ingestion/documents',
+        headers: { ...authHeader(), 'content-type': contentType },
+        payload: body,
+      });
+      expect(response.statusCode).toBe(415);
+      expect(response.json().error).toBe('unsupported_modality');
+    });
+
+    it('rejects a request with no file, honestly, rather than creating an empty memory', async () => {
+      const { body, contentType } = buildMultipartBody({ title: 'no file here' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/ingestion/documents',
+        headers: { ...authHeader(), 'content-type': contentType },
+        payload: body,
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toBe('no_file');
+    });
+
+    it('a malformed/corrupt PDF fails honestly with extraction_failed, never a fabricated memory', async () => {
+      const { body, contentType } = buildMultipartBody(
+        {},
+        { fieldName: 'file', filename: 'corrupt.pdf', contentType: 'application/pdf', data: Buffer.from('%PDF-1.4 not a real pdf body at all') },
+      );
+      const response = await app.inject({
+        method: 'POST',
+        url: '/ingestion/documents',
+        headers: { ...authHeader(), 'content-type': contentType },
+        payload: body,
+      });
+      expect(response.statusCode).toBe(422);
+      expect(response.json().error).toBe('extraction_failed');
+    });
+
+    it('a real extracted document memory is retrievable via Context Engine (end-to-end multimodal retrieval)', async () => {
+      const marker = `context-pdf-marker-${Date.now()}`;
+      const pdf = await makePdfBuffer(`Twin roadmap notes. ${marker} is the unique topic discussed in this document.`);
+      const { body, contentType } = buildMultipartBody(
+        {},
+        { fieldName: 'file', filename: 'roadmap.pdf', contentType: 'application/pdf', data: pdf },
+      );
+      const uploadResponse = await app.inject({
+        method: 'POST',
+        url: '/ingestion/documents',
+        headers: { ...authHeader(), 'content-type': contentType },
+        payload: body,
+      });
+      expect(uploadResponse.statusCode).toBe(201);
+      const memoryId = uploadResponse.json().memory.id;
+
+      const contextResponse = await app.inject({
+        method: 'POST',
+        url: '/context',
+        headers: authHeader(),
+        payload: { query: marker },
+      });
+      expect(contextResponse.statusCode).toBe(200);
+      expect(contextResponse.json().memories.some((m: { memoryId: string }) => m.memoryId === memoryId)).toBe(true);
+    });
+
+    it('security: unauthenticated document upload is rejected', async () => {
+      const pdf = await makePdfBuffer('unauthenticated upload attempt');
+      const { body, contentType } = buildMultipartBody(
+        {},
+        { fieldName: 'file', filename: 'x.pdf', contentType: 'application/pdf', data: pdf },
+      );
+      const response = await app.inject({ method: 'POST', url: '/ingestion/documents', headers: { 'content-type': contentType }, payload: body });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('cross-user isolation: another user cannot fetch this user\'s document-derived ingestion job', async () => {
+      const pdf = await makePdfBuffer('private document content for isolation check');
+      const { body, contentType } = buildMultipartBody(
+        {},
+        { fieldName: 'file', filename: 'private.pdf', contentType: 'application/pdf', data: pdf },
+      );
+      const uploadResponse = await app.inject({
+        method: 'POST',
+        url: '/ingestion/documents',
+        headers: { ...authHeader(), 'content-type': contentType },
+        payload: body,
+      });
+      const jobId = uploadResponse.json().job.id;
+
+      const otherEmail = `ingestion-doc-other-${Date.now()}@twin.test`;
+      const otherSignup = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { fullName: 'Other Document User', email: otherEmail, password: 'password123' },
+      });
+      const otherToken = otherSignup.json().accessToken;
+      const otherUserId = otherSignup.json().user.id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/ingestion/${jobId}`,
+        headers: { authorization: `Bearer ${otherToken}` },
+      });
+      expect(response.statusCode).toBe(404);
+
+      await app.db.execute(sql`DELETE FROM users WHERE id = ${otherUserId}`);
+    });
   });
 
   it('image ingestion: requires a manual description (no OCR) and stores it as explicit content', async () => {
