@@ -19,6 +19,8 @@ import {
   MIN_DECISION_HISTORY_ENTRIES,
   MAX_DECISIONS_SCANNED,
   MAX_EVIDENCE_HISTORY_PER_INSIGHT,
+  GOAL_TARGET_APPROACHING_WINDOW_DAYS,
+  MAX_GOALS_SCANNED_FOR_TARGET_DATE,
 } from './categories.js';
 import {
   computeNeglectedGoalConfidence,
@@ -27,6 +29,7 @@ import {
   computeRelationshipTensionConfidence,
   computeCrossInsightConfidence,
   computeDecisionEvolutionConfidence,
+  computeGoalTargetApproachingConfidence,
 } from './confidence.js';
 import {
   computeNeglectedGoalTemporalState,
@@ -36,6 +39,7 @@ import {
   isRelationshipTensionResolved,
   computeCrossInsightTemporalState,
   computeDecisionEvolutionTemporalState,
+  computeGoalTargetApproachingTemporalState,
 } from './temporal.js';
 import { getCurrentModel } from '../personalModel/personalModelService.js';
 import { detectRelationshipConflicts } from '../personalModel/conflicts.js';
@@ -740,6 +744,80 @@ export async function computeDecisionEvolutionInsights(db: Queryable, userId: st
 }
 
 // ---------------------------------------------------------------------------
+// goal_target_approaching — Phase 40. Derived directly from a goal's
+// own real target_date (packages/db/src/schema/goals.ts), populated
+// either by explicit extraction (ingestion/extraction/pipeline.ts,
+// only when a specific date was actually stated) or manual entry —
+// never inferred, never defaulted. Fires only while the date is
+// genuinely upcoming; never claims a goal is "at risk" or "overdue".
+// ---------------------------------------------------------------------------
+
+export interface RawGoalWithTargetDate {
+  entityId: string;
+  name: string;
+  targetDate: Date;
+}
+
+/**
+ * Pure — takes the already-fetched, already-filtered (active, has a
+ * real target date) goal rows, directly unit testable, same shape as
+ * every other detector's builder above.
+ */
+export function buildGoalTargetApproachingCandidates(goalsWithTarget: RawGoalWithTargetDate[], now: Date): InsightCandidate[] {
+  const candidates: InsightCandidate[] = [];
+  for (const goal of goalsWithTarget) {
+    const daysUntilTarget = (goal.targetDate.getTime() - now.getTime()) / MS_PER_DAY;
+    if (daysUntilTarget < 0 || daysUntilTarget > GOAL_TARGET_APPROACHING_WINDOW_DAYS) continue;
+
+    const roundedDays = Math.round(daysUntilTarget);
+    const targetDateStr = goal.targetDate.toISOString().slice(0, 10);
+    const description =
+      roundedDays === 0
+        ? `"${goal.name}" has a target date of today (${targetDateStr}).`
+        : `"${goal.name}" has a target date of ${targetDateStr} (in ${roundedDays} day${roundedDays === 1 ? '' : 's'}).`;
+
+    candidates.push({
+      insightType: 'goal_target_approaching',
+      subjectKey: goal.entityId,
+      statusClass: 'observed',
+      temporalState: computeGoalTargetApproachingTemporalState(daysUntilTarget),
+      title: `"${goal.name}" target date is approaching`,
+      description,
+      confidence: computeGoalTargetApproachingConfidence({ daysUntilTarget, windowDays: GOAL_TARGET_APPROACHING_WINDOW_DAYS }),
+      subjectEntityId: goal.entityId,
+      firstObservedAt: now,
+      lastObservedAt: now,
+      observationCount: 1,
+      evidence: [{ evidenceType: 'entity', entityId: goal.entityId, text: null, observedAt: goal.targetDate }],
+    });
+  }
+  return candidates;
+}
+
+/**
+ * DB-touching wrapper: one bounded query for the user's active goals
+ * with a real target date — same LEFT JOIN rationale as
+ * computeNeglectedGoalInsights (a goal subtype row isn't guaranteed to
+ * exist for every entityType='goal' row created before Phase 33).
+ * Delegates to the pure builder above.
+ */
+export async function computeGoalTargetApproachingInsights(db: Queryable, userId: string, now: Date = new Date()): Promise<InsightCandidate[]> {
+  const rows = await db
+    .select({ entityId: entities.id, name: entities.name, status: goals.status, targetDate: goals.targetDate })
+    .from(entities)
+    .innerJoin(goals, eq(goals.entityId, entities.id))
+    .where(and(eq(entities.userId, userId), eq(entities.entityType, 'goal'), isNull(entities.archivedAt)))
+    .orderBy(desc(entities.createdAt))
+    .limit(MAX_GOALS_SCANNED_FOR_TARGET_DATE);
+
+  const eligible: RawGoalWithTargetDate[] = rows
+    .filter((r) => r.targetDate !== null && !RESOLVED_GOAL_STATUSES.includes(r.status))
+    .map((r) => ({ entityId: r.entityId, name: r.name, targetDate: r.targetDate! }));
+
+  return buildGoalTargetApproachingCandidates(eligible, now);
+}
+
+// ---------------------------------------------------------------------------
 // Orchestrator
 // ---------------------------------------------------------------------------
 
@@ -757,12 +835,14 @@ export async function computeDecisionEvolutionInsights(db: Queryable, userId: st
  * cross_insight this way.
  */
 export async function computeAllInsightCandidates(db: Queryable, userId: string, now: Date = new Date()): Promise<InsightCandidate[]> {
-  const [neglectedGoalCandidates, personalModelFacts, relationshipTensionCandidates, decisionEvolutionCandidates] = await Promise.all([
-    computeNeglectedGoalInsights(db, userId, now),
-    getCurrentModel(db, userId),
-    computeRelationshipTensionInsights(db, userId, now),
-    computeDecisionEvolutionInsights(db, userId, now),
-  ]);
+  const [neglectedGoalCandidates, personalModelFacts, relationshipTensionCandidates, decisionEvolutionCandidates, goalTargetApproachingCandidates] =
+    await Promise.all([
+      computeNeglectedGoalInsights(db, userId, now),
+      getCurrentModel(db, userId),
+      computeRelationshipTensionInsights(db, userId, now),
+      computeDecisionEvolutionInsights(db, userId, now),
+      computeGoalTargetApproachingInsights(db, userId, now),
+    ]);
 
   const rawFacts: RawPersonalModelFact[] = personalModelFacts.map((f) => ({
     id: f.id,
@@ -784,6 +864,7 @@ export async function computeAllInsightCandidates(db: Queryable, userId: string,
     ...buildPriorityTensionCandidates(rawFacts, now),
     ...relationshipTensionCandidates,
     ...decisionEvolutionCandidates,
+    ...goalTargetApproachingCandidates,
   ];
 }
 
@@ -819,6 +900,7 @@ const SOURCE_TYPE_LABEL: Partial<Record<InsightType, string>> = {
   priority_tension: 'a priority tension',
   relationship_tension: 'a relationship tension',
   decision_evolution: 'a decision that evolved over time',
+  goal_target_approaching: 'a goal with an approaching target date',
 };
 
 function normalizeAnchorText(raw: string): string {

@@ -5,9 +5,11 @@ import {
   projects as projectsTable,
   goals as goalsTable,
   decisions as decisionsTable,
+  events as eventsTable,
   type Database,
   type Queryable,
 } from '@twin/db';
+import type { EntitySubtype } from '@twin/contracts';
 import { findExactMatch } from '../graph/entityResolution.js';
 
 export class EntityError extends Error {
@@ -187,6 +189,114 @@ export async function getEntityById(db: Queryable, userId: string, entityId: str
     .where(and(eq(entities.id, entityId), eq(entities.userId, userId)))
     .limit(1);
   return entity;
+}
+
+/**
+ * Phase 40: reads the real 1:1 subtype row for a single entity, when
+ * its type has one and the row actually exists (e.g. an 'event'
+ * created before the extraction pipeline ever wrote its required
+ * startsAt — see createSubtypeRowIfApplicable's documented limitation
+ * — has no subtype row at all, not a row with a null date). Never
+ * fabricates a value the underlying table doesn't have.
+ */
+export async function getEntitySubtype(db: Queryable, entityType: EntityRow['entityType'], entityId: string): Promise<EntitySubtype | null> {
+  switch (entityType) {
+    case 'person': {
+      const [row] = await db.select().from(peopleTable).where(eq(peopleTable.entityId, entityId)).limit(1);
+      return row ? { kind: 'person', role: row.role, relationship: row.relationship } : null;
+    }
+    case 'project': {
+      const [row] = await db.select().from(projectsTable).where(eq(projectsTable.entityId, entityId)).limit(1);
+      return row
+        ? { kind: 'project', status: row.status, startedAt: row.startedAt?.toISOString() ?? null, completedAt: row.completedAt?.toISOString() ?? null }
+        : null;
+    }
+    case 'goal': {
+      const [row] = await db.select().from(goalsTable).where(eq(goalsTable.entityId, entityId)).limit(1);
+      return row
+        ? { kind: 'goal', status: row.status, targetDate: row.targetDate?.toISOString() ?? null, achievedAt: row.achievedAt?.toISOString() ?? null }
+        : null;
+    }
+    case 'event': {
+      const [row] = await db.select().from(eventsTable).where(eq(eventsTable.entityId, entityId)).limit(1);
+      return row ? { kind: 'event', startsAt: row.startsAt.toISOString(), endsAt: row.endsAt?.toISOString() ?? null, location: row.location } : null;
+    }
+    case 'decision': {
+      const [row] = await db.select().from(decisionsTable).where(eq(decisionsTable.entityId, entityId)).limit(1);
+      return row
+        ? { kind: 'decision', status: row.status, outcome: row.outcome, decidedAt: row.decidedAt?.toISOString() ?? null }
+        : null;
+    }
+    case 'idea':
+      return null;
+  }
+}
+
+/**
+ * Phase 40: the same subtype lookup as getEntitySubtype, batched for a
+ * SET of entities (Context Engine's entity items) — one query per
+ * distinct entityType actually present, never one query per entity.
+ * Entities with no subtype table (idea) or no subtype row yet are
+ * simply absent from the returned map, not represented as a fabricated
+ * empty object.
+ */
+export async function getEntitySubtypesBatch(
+  db: Queryable,
+  entitiesToLookUp: { id: string; entityType: EntityRow['entityType'] }[],
+): Promise<Map<string, EntitySubtype>> {
+  const result = new Map<string, EntitySubtype>();
+  const idsByType = new Map<EntityRow['entityType'], string[]>();
+  for (const e of entitiesToLookUp) {
+    const list = idsByType.get(e.entityType) ?? [];
+    list.push(e.id);
+    idsByType.set(e.entityType, list);
+  }
+
+  const personIds = idsByType.get('person');
+  if (personIds && personIds.length > 0) {
+    const rows = await db.select().from(peopleTable).where(inArray(peopleTable.entityId, personIds));
+    for (const row of rows) result.set(row.entityId, { kind: 'person', role: row.role, relationship: row.relationship });
+  }
+  const projectIds = idsByType.get('project');
+  if (projectIds && projectIds.length > 0) {
+    const rows = await db.select().from(projectsTable).where(inArray(projectsTable.entityId, projectIds));
+    for (const row of rows) {
+      result.set(row.entityId, {
+        kind: 'project',
+        status: row.status,
+        startedAt: row.startedAt?.toISOString() ?? null,
+        completedAt: row.completedAt?.toISOString() ?? null,
+      });
+    }
+  }
+  const goalIds = idsByType.get('goal');
+  if (goalIds && goalIds.length > 0) {
+    const rows = await db.select().from(goalsTable).where(inArray(goalsTable.entityId, goalIds));
+    for (const row of rows) {
+      result.set(row.entityId, {
+        kind: 'goal',
+        status: row.status,
+        targetDate: row.targetDate?.toISOString() ?? null,
+        achievedAt: row.achievedAt?.toISOString() ?? null,
+      });
+    }
+  }
+  const eventIds = idsByType.get('event');
+  if (eventIds && eventIds.length > 0) {
+    const rows = await db.select().from(eventsTable).where(inArray(eventsTable.entityId, eventIds));
+    for (const row of rows) {
+      result.set(row.entityId, { kind: 'event', startsAt: row.startsAt.toISOString(), endsAt: row.endsAt?.toISOString() ?? null, location: row.location });
+    }
+  }
+  const decisionIds = idsByType.get('decision');
+  if (decisionIds && decisionIds.length > 0) {
+    const rows = await db.select().from(decisionsTable).where(inArray(decisionsTable.entityId, decisionIds));
+    for (const row of rows) {
+      result.set(row.entityId, { kind: 'decision', status: row.status, outcome: row.outcome, decidedAt: row.decidedAt?.toISOString() ?? null });
+    }
+  }
+
+  return result;
 }
 
 /**

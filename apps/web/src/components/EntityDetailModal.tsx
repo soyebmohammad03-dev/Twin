@@ -158,6 +158,61 @@ export const EntityDetailModal: React.FC<EntityDetailModalProps> = ({ entityId, 
                   View decision status &amp; evidence
                 </button>
               )}
+
+              {/* Phase 40: the entity's real subtype data — status/dates Twin actually recorded, never invented. */}
+              {detail.subtype && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  {detail.subtype.kind === 'project' && (
+                    <>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-500/10 border border-slate-500/30 text-slate-400 uppercase tracking-wider">
+                        {detail.subtype.status}
+                      </span>
+                      {detail.subtype.startedAt && (
+                        <span className="text-[10px] font-mono text-slate-500">
+                          started {new Date(detail.subtype.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      )}
+                      {detail.subtype.completedAt && (
+                        <span className="text-[10px] font-mono text-slate-500">
+                          completed {new Date(detail.subtype.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {detail.subtype.kind === 'goal' && (
+                    <>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-500/10 border border-slate-500/30 text-slate-400 uppercase tracking-wider">
+                        {detail.subtype.status}
+                      </span>
+                      {detail.subtype.targetDate && (
+                        <span className="text-[10px] font-mono text-slate-500">
+                          target {new Date(detail.subtype.targetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      )}
+                      {detail.subtype.achievedAt && (
+                        <span className="text-[10px] font-mono text-slate-500">
+                          achieved {new Date(detail.subtype.achievedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {detail.subtype.kind === 'event' && (
+                    <>
+                      <span className="text-[10px] font-mono text-slate-500">
+                        {new Date(detail.subtype.startsAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        {detail.subtype.endsAt &&
+                          ` – ${new Date(detail.subtype.endsAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`}
+                      </span>
+                      {detail.subtype.location && <span className="text-[10px] font-mono text-slate-500">· {detail.subtype.location}</span>}
+                    </>
+                  )}
+                  {detail.subtype.kind === 'person' && (detail.subtype.role || detail.subtype.relationship) && (
+                    <span className="text-[10px] font-mono text-slate-500">
+                      {[detail.subtype.role, detail.subtype.relationship].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Relationships */}

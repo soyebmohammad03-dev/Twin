@@ -23,6 +23,7 @@ describe('Phase 8 Context Engine — real database', () => {
   let buildContext: typeof import('../src/modules/context/contextEngine.js').buildContext;
   let ContextError: typeof import('../src/modules/context/contextEngine.js').ContextError;
   let createEntity: typeof import('../src/modules/entities/entities.service.js').createEntity;
+  let findOrCreateEntity: typeof import('../src/modules/entities/entities.service.js').findOrCreateEntity;
   let createMemory: typeof import('../src/modules/memories/memories.service.js').createMemory;
   let archiveMemory: typeof import('../src/modules/memories/memories.service.js').archiveMemory;
   let upsertRelationshipWithEvidence: typeof import('../src/modules/graph/relationships.service.js').upsertRelationshipWithEvidence;
@@ -101,7 +102,7 @@ describe('Phase 8 Context Engine — real database', () => {
     db = app.db;
 
     ({ buildContext, ContextError } = await import('../src/modules/context/contextEngine.js'));
-    ({ createEntity } = await import('../src/modules/entities/entities.service.js'));
+    ({ createEntity, findOrCreateEntity } = await import('../src/modules/entities/entities.service.js'));
     ({ createMemory, archiveMemory } = await import('../src/modules/memories/memories.service.js'));
     ({ upsertRelationshipWithEvidence } = await import('../src/modules/graph/relationships.service.js'));
     ({ rebuildPersonalModel } = await import('../src/modules/personalModel/personalModelStore.js'));
@@ -822,6 +823,102 @@ describe('Phase 8 Context Engine — real database', () => {
     it('a query with no temporal expression and no explicit range is unaffected — no spurious date filtering', async () => {
       const packet = await buildContext(db, userId, { query: arjun.name });
       expect(packet.memories.some((m) => m.memoryId === m2)).toBe(true);
+    });
+  });
+
+  describe('Phase 40 — entity subtype surfaced in Context Engine entity items, and a cross-entity synthetic dataset evaluation', () => {
+    let maya: { id: string; name: string };
+    let nebulaProject: { id: string; name: string };
+    let launchGoal: { id: string; name: string };
+    let vendorDecision: { id: string; name: string };
+    let kickoffEvent: { id: string; name: string };
+    let oldNebulaMemoryId: string;
+    let recentNebulaMemoryId: string;
+    let mayaMemoryId: string;
+
+    beforeAll(async () => {
+      const { entity: mayaEntity } = await findOrCreateEntity(db, userId, { entityType: 'person', name: name('Maya') });
+      const { entity: projectEntity } = await findOrCreateEntity(db, userId, { entityType: 'project', name: name('Nebula Rollout') });
+      const { entity: goalEntity } = await findOrCreateEntity(db, userId, { entityType: 'goal', name: name('Launch Nebula by Q4') });
+      const { entity: decisionEntity } = await findOrCreateEntity(db, userId, { entityType: 'decision', name: name('Choose Nebula Vendor') });
+      maya = mayaEntity;
+      nebulaProject = projectEntity;
+      launchGoal = goalEntity;
+      vendorDecision = decisionEntity;
+      kickoffEvent = await createEntity(db, userId, { entityType: 'event', name: name('Nebula Kickoff') });
+
+      // Real, deterministic subtype data — never fabricated by the test's assertions, only set up as fixture input.
+      await db.execute(sql`UPDATE projects SET status = 'active', started_at = '2026-01-10T00:00:00.000Z' WHERE entity_id = ${nebulaProject.id}`);
+      await db.execute(sql`UPDATE goals SET target_date = '2026-12-31T00:00:00.000Z' WHERE entity_id = ${launchGoal.id}`);
+      await db.execute(
+        sql`INSERT INTO events (entity_id, starts_at, location) VALUES (${kickoffEvent.id}, '2026-01-10T09:00:00.000Z', 'Main Office')`,
+      );
+
+      oldNebulaMemoryId = await makeMemory({ uid: userId, content: `Kicked off ${nebulaProject.name} planning`, entityIds: [nebulaProject.id], occurredAt: daysAgo(60) });
+      recentNebulaMemoryId = await makeMemory({ uid: userId, content: `${nebulaProject.name} is progressing well this week`, entityIds: [nebulaProject.id], occurredAt: daysAgo(1) });
+      mayaMemoryId = await makeMemory({ uid: userId, content: `${maya.name} took ownership of the ${nebulaProject.name}`, entityIds: [maya.id, nebulaProject.id], occurredAt: daysAgo(2) });
+
+      // Only relationships actually established by this test data.
+      await upsertRelationshipWithEvidence(db, {
+        userId,
+        fromEntityId: maya.id,
+        toEntityId: nebulaProject.id,
+        relationshipType: 'works_on',
+        epistemicStatus: 'explicit',
+        confidence: 1,
+        extractionMethod: 'test-fixture',
+        sourceMemoryId: mayaMemoryId,
+      });
+      await db.insert(entityRelationships).values([
+        { userId, fromEntityId: nebulaProject.id, toEntityId: launchGoal.id, relationshipType: 'has_goal', epistemicStatus: 'explicit', extractionMethod: 'test-fixture' },
+        { userId, fromEntityId: nebulaProject.id, toEntityId: vendorDecision.id, relationshipType: 'resulted_in', epistemicStatus: 'explicit', extractionMethod: 'test-fixture' },
+        { userId, fromEntityId: nebulaProject.id, toEntityId: kickoffEvent.id, relationshipType: 'has_event', epistemicStatus: 'explicit', extractionMethod: 'test-fixture' },
+      ]);
+    });
+
+    it('"What is happening with Project X?" includes the project entity with its real subtype status/startedAt', async () => {
+      const packet = await buildContext(db, userId, { query: `What is happening with ${nebulaProject.name}?` });
+      const projectItem = packet.entities.find((e) => e.entityId === nebulaProject.id);
+      expect(projectItem).toBeTruthy();
+      expect(projectItem!.subtype).toEqual({ kind: 'project', status: 'active', startedAt: '2026-01-10T00:00:00.000Z', completedAt: null });
+      expect(packet.memories.map((m) => m.memoryId)).toContain(recentNebulaMemoryId);
+    });
+
+    it('an explicit goalEntityId resolves the goal as a target with its real target date, never invented', async () => {
+      const packet = await buildContext(db, userId, { query: 'What is the status of this goal?', goalEntityId: launchGoal.id });
+      const goalItem = packet.entities.find((e) => e.entityId === launchGoal.id);
+      expect(goalItem).toBeTruthy();
+      expect(goalItem!.matchType).toBe('target');
+      expect(goalItem!.subtype).toEqual({ kind: 'goal', status: 'active', targetDate: '2026-12-31T00:00:00.000Z', achievedAt: null });
+    });
+
+    it('cross-entity context: the project\'s connected goal, decision, and event are all reachable via bounded graph expansion, each with real subtype data', async () => {
+      const packet = await buildContext(db, userId, { query: `${nebulaProject.name} details`, graphHops: 1 });
+      const byId = new Map(packet.entities.map((e) => [e.entityId, e]));
+      expect(byId.get(launchGoal.id)?.subtype).toMatchObject({ kind: 'goal', targetDate: '2026-12-31T00:00:00.000Z' });
+      expect(byId.get(vendorDecision.id)?.subtype).toMatchObject({ kind: 'decision' });
+      expect(byId.get(kickoffEvent.id)?.subtype).toEqual({ kind: 'event', startsAt: '2026-01-10T09:00:00.000Z', endsAt: null, location: 'Main Office' });
+    });
+
+    it('"What do I know about Person Y?" surfaces Maya\'s real role-linked memory and her person subtype (null, since no role/relationship was ever recorded)', async () => {
+      const packet = await buildContext(db, userId, { query: `What do I know about ${maya.name}?` });
+      const mayaItem = packet.entities.find((e) => e.entityId === maya.id);
+      expect(mayaItem).toBeTruthy();
+      expect(mayaItem!.subtype).toEqual({ kind: 'person', role: null, relationship: null });
+      expect(packet.memories.map((m) => m.memoryId)).toContain(mayaMemoryId);
+    });
+
+    it('an unrelated query never surfaces the Nebula fixtures — precision, not a knowledge-graph dump', async () => {
+      const packet = await buildContext(db, userId, { query: 'unrelated topic that shares no vocabulary with nebula whatsoever' });
+      const ids = packet.entities.map((e) => e.entityId);
+      expect(ids).not.toContain(nebulaProject.id);
+      expect(ids).not.toContain(launchGoal.id);
+    });
+
+    it('cross-user isolation: another user\'s context for the same entity name never includes this fixture\'s real subtype data', async () => {
+      const packet = await buildContext(db, otherUserId, { query: `What is happening with ${nebulaProject.name}?` });
+      expect(packet.entities.some((e) => e.entityId === nebulaProject.id)).toBe(false);
+      expect(packet.memories.some((m) => m.memoryId === recentNebulaMemoryId || m.memoryId === oldNebulaMemoryId)).toBe(false);
     });
   });
 });

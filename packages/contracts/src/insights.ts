@@ -38,6 +38,7 @@ export const insightTypeSchema = z.enum([
   'relationship_tension',
   'cross_insight',
   'decision_evolution',
+  'goal_target_approaching',
 ]);
 export type InsightType = z.infer<typeof insightTypeSchema>;
 

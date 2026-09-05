@@ -18,7 +18,7 @@ import type {
   InsightTemporalState,
 } from '@twin/contracts';
 import { CONTEXT_PACKET_VERSION } from '@twin/contracts';
-import { getEntityById, type EntityRow } from '../entities/entities.service.js';
+import { getEntityById, getEntitySubtypesBatch, type EntityRow } from '../entities/entities.service.js';
 import { getSupportingMemories } from '../graph/graph.service.js';
 import { traverseFromEntity } from '../graph/traversal.service.js';
 import {
@@ -276,12 +276,18 @@ export async function buildContext(
   const entitiesTruncated = totalCandidateEntities > selectedEntities.length;
   const includedEntityIds = new Set(selectedEntities.map((e) => e.id));
 
+  // Phase 40: one batched query per distinct entityType among the
+  // FINAL selected (post-truncation) entities — never per-entity, and
+  // never for entities that didn't make the budget cut.
+  const subtypeByEntityId = await getEntitySubtypesBatch(db, selectedEntities.map((e) => ({ id: e.id, entityType: e.entityType })));
+
   const entityItems: ContextEntityItem[] = selectedEntities.map((e) => ({
     entityId: e.id,
     entityType: e.entityType,
     name: e.name,
     matchType: e.matchType,
     hopDistance: e.hopDistance,
+    subtype: subtypeByEntityId.get(e.id) ?? null,
   }));
 
   // --- 5b. Personal Model facts + Insights connected to the included

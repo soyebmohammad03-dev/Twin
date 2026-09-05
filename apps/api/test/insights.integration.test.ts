@@ -1615,6 +1615,78 @@ describe('Phase 10 Insight layer — real database', () => {
     });
   });
 
+  describe('Phase 40 — goal target-date approaching detection', () => {
+    async function setGoalTargetDate(entityId: string, targetDate: Date | null, status = 'active'): Promise<void> {
+      await db.execute(
+        sql`INSERT INTO goals (entity_id, status, target_date) VALUES (${entityId}, ${status}, ${targetDate ? targetDate.toISOString() : null})
+            ON CONFLICT (entity_id) DO UPDATE SET status = ${status}, target_date = ${targetDate ? targetDate.toISOString() : null}`,
+      );
+    }
+
+    it('a goal with no target date produces no goal_target_approaching insight — insufficient evidence, never fabricated', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const goal = await createEntity(db, userId, { entityType: 'goal', name: name('No Target Date Goal') });
+      await setGoalTargetDate(goal.id, null);
+
+      await rebuildInsights(db, userId, now);
+      const insights = await getCurrentInsights(db, userId);
+      expect(insights.some((i) => i.insightType === 'goal_target_approaching' && i.subjectEntityId === goal.id)).toBe(false);
+    });
+
+    it('a real, upcoming target date produces exactly one goal_target_approaching insight with evidence pointing at the goal entity', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const goal = await createEntity(db, userId, { entityType: 'goal', name: name('Upcoming Target Goal') });
+      const targetDate = new Date(now.getTime() + 5 * DAY_MS);
+      await setGoalTargetDate(goal.id, targetDate);
+
+      await rebuildInsights(db, userId, now);
+      const insights = await getCurrentInsights(db, userId);
+      const insight = insights.find((i) => i.insightType === 'goal_target_approaching' && i.subjectEntityId === goal.id);
+      expect(insight).toBeTruthy();
+      expect(insight!.statusClass).toBe('observed');
+      expect(insight!.temporalState).toBe('stable'); // within GOAL_TARGET_APPROACHING_STABLE_DAYS
+
+      const { evidence } = await getInsightEvidence(db, userId, insight!.id);
+      expect(evidence).toHaveLength(1);
+      expect(evidence[0]!.evidenceType).toBe('entity');
+      expect(evidence[0]!.entityId).toBe(goal.id);
+    });
+
+    it('a target date already in the past produces no insight — this detector never claims "overdue"', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const goal = await createEntity(db, userId, { entityType: 'goal', name: name('Past Target Goal') });
+      await setGoalTargetDate(goal.id, new Date(now.getTime() - 5 * DAY_MS));
+
+      await rebuildInsights(db, userId, now);
+      const insights = await getCurrentInsights(db, userId);
+      expect(insights.some((i) => i.insightType === 'goal_target_approaching' && i.subjectEntityId === goal.id)).toBe(false);
+    });
+
+    it('an already-achieved goal with a technically-approaching target date is never flagged', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const goal = await createEntity(db, userId, { entityType: 'goal', name: name('Achieved Goal With Target') });
+      await setGoalTargetDate(goal.id, new Date(now.getTime() + 5 * DAY_MS), 'achieved');
+
+      await rebuildInsights(db, userId, now);
+      const insights = await getCurrentInsights(db, userId);
+      expect(insights.some((i) => i.insightType === 'goal_target_approaching' && i.subjectEntityId === goal.id)).toBe(false);
+    });
+
+    it('cross-user isolation: another user\'s approaching goal never contributes to this user\'s insights', async () => {
+      const now = new Date('2026-06-01T00:00:00.000Z');
+      const theirGoal = await createEntity(db, otherUserId, { entityType: 'goal', name: name('Other User Goal') });
+      await setGoalTargetDate(theirGoal.id, new Date(now.getTime() + 3 * DAY_MS));
+
+      await rebuildInsights(db, userId, now);
+      const myInsights = await getCurrentInsights(db, userId);
+      expect(myInsights.some((i) => i.subjectEntityId === theirGoal.id)).toBe(false);
+
+      await rebuildInsights(db, otherUserId, now);
+      const theirInsights = await getCurrentInsights(db, otherUserId);
+      expect(theirInsights.some((i) => i.insightType === 'goal_target_approaching' && i.subjectEntityId === theirGoal.id)).toBe(true);
+    });
+  });
+
   describe('Phase 37 — decision evolution detection', () => {
     it('a decision with no history at all produces no decision_evolution insight — insufficient evidence, never fabricated', async () => {
       const now = new Date('2026-06-01T00:00:00.000Z');

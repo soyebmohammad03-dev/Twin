@@ -30,6 +30,7 @@ export const INSIGHT_TYPE_ICON: Record<InsightDto['insightType'], string> = {
   relationship_tension: 'hub',
   cross_insight: 'workspaces',
   decision_evolution: 'history',
+  goal_target_approaching: 'event_upcoming',
 };
 
 const TEMPORAL_LABEL: Partial<Record<string, string>> = {

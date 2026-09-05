@@ -21,6 +21,7 @@ export const INSIGHT_TYPES: readonly InsightType[] = [
   'relationship_tension',
   'cross_insight',
   'decision_evolution',
+  'goal_target_approaching',
 ];
 
 // ---------------------------------------------------------------------------
@@ -140,3 +141,21 @@ export const DECISION_EVOLUTION_RECURRING_TRANSITIONS = 3;
 
 /** Below the recurring threshold, a decision whose most recent transition is at least this many days old reads as 'stable' rather than 'emerging' (just changed). */
 export const DECISION_EVOLUTION_STABLE_DAYS = 14;
+
+// ---------------------------------------------------------------------------
+// Phase 40: goal_target_approaching — derived directly from a real,
+// user-recorded goals.target_date (never invented, never inferred from
+// vague language). Deliberately narrow: only ever fires for a goal
+// that HAS a real target date, still active, and that date is genuinely
+// upcoming — never "overdue"/"at risk", which this detector does not
+// claim.
+// ---------------------------------------------------------------------------
+
+/** A goal's real target date must be within this many days of "now" (and not already past) to qualify as "approaching" — documented heuristic, not tuned. */
+export const GOAL_TARGET_APPROACHING_WINDOW_DAYS = 30;
+
+/** Within this many days of the target date, the pattern reads as 'stable' (imminent) rather than 'emerging' (still some runway). */
+export const GOAL_TARGET_APPROACHING_STABLE_DAYS = 7;
+
+/** A rebuild scans a bounded slice of a user's goals for target-date approach, same bounding spirit as MAX_GOALS_SCANNED. */
+export const MAX_GOALS_SCANNED_FOR_TARGET_DATE = 200;

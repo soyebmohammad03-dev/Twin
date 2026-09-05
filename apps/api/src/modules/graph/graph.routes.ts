@@ -97,6 +97,7 @@ export async function registerGraphRoutes(app: FastifyInstance) {
         const detail = await getEntityDetail(app.db, userId, request.params.id);
         const response: EntityDetailResponse = {
           entity: toEntityDto(detail.entity),
+          subtype: detail.subtype,
           relationships: detail.relationships.map((r) => ({
             relationship: toRelationshipDto(r.relationship),
             connectedEntity: toEntityDto(r.connectedEntity),

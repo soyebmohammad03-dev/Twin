@@ -483,6 +483,51 @@ describe('Phase 7 knowledge graph — real database', () => {
       expect(body.relationships[0].relationship.epistemicStatus).toBe('explicit');
     });
 
+    it('Phase 40: GET /graph/entities/:id returns null subtype for an entity created via plain createEntity (no subtype row) — honest absence, never a fabricated default', async () => {
+      const response = await app.inject({ method: 'GET', url: `/graph/entities/${httpDrone.id}`, headers: authHeader(userToken) });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().subtype).toBeNull();
+    });
+
+    it('Phase 40: GET /graph/entities/:id returns real project subtype data (status, startedAt, completedAt)', async () => {
+      const { entity: project } = await findOrCreateEntity(db, userId, { entityType: 'project', name: 'Subtype Project' });
+      const response = await app.inject({ method: 'GET', url: `/graph/entities/${project.id}`, headers: authHeader(userToken) });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().subtype).toEqual({ kind: 'project', status: 'active', startedAt: null, completedAt: null });
+
+      const startedAt = '2026-01-15T00:00:00.000Z';
+      await db.execute(sql`UPDATE projects SET started_at = ${startedAt} WHERE entity_id = ${project.id}`);
+      const updated = await app.inject({ method: 'GET', url: `/graph/entities/${project.id}`, headers: authHeader(userToken) });
+      expect(updated.json().subtype).toEqual({ kind: 'project', status: 'active', startedAt, completedAt: null });
+    });
+
+    it('Phase 40: GET /graph/entities/:id returns a goal\'s real target date, never an invented one', async () => {
+      const { entity: goal } = await findOrCreateEntity(db, userId, { entityType: 'goal', name: 'Subtype Goal' });
+      const noTargetResponse = await app.inject({ method: 'GET', url: `/graph/entities/${goal.id}`, headers: authHeader(userToken) });
+      expect(noTargetResponse.json().subtype).toEqual({ kind: 'goal', status: 'active', targetDate: null, achievedAt: null });
+
+      const targetDate = '2026-12-01T00:00:00.000Z';
+      await db.execute(sql`UPDATE goals SET target_date = ${targetDate} WHERE entity_id = ${goal.id}`);
+      const withTarget = await app.inject({ method: 'GET', url: `/graph/entities/${goal.id}`, headers: authHeader(userToken) });
+      expect(withTarget.json().subtype).toEqual({ kind: 'goal', status: 'active', targetDate, achievedAt: null });
+    });
+
+    it('Phase 40: GET /graph/entities/:id returns a real event\'s startsAt/endsAt/location', async () => {
+      const event = await createEntity(db, userId, { entityType: 'event', name: 'Subtype Event' });
+      const startsAt = '2026-03-01T18:00:00.000Z';
+      await db.execute(sql`INSERT INTO events (entity_id, starts_at, location) VALUES (${event.id}, ${startsAt}, 'Conference Room A')`);
+
+      const response = await app.inject({ method: 'GET', url: `/graph/entities/${event.id}`, headers: authHeader(userToken) });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().subtype).toEqual({ kind: 'event', startsAt, endsAt: null, location: 'Conference Room A' });
+    });
+
+    it('Phase 40: GET /graph/entities/:id returns null subtype for an "idea" entity, which has no subtype table at all', async () => {
+      const idea = await createEntity(db, userId, { entityType: 'idea', name: 'Subtype Idea' });
+      const response = await app.inject({ method: 'GET', url: `/graph/entities/${idea.id}`, headers: authHeader(userToken) });
+      expect(response.json().subtype).toBeNull();
+    });
+
     it('GET /graph/entities/:id/related returns bounded traversal nodes', async () => {
       const response = await app.inject({
         method: 'GET',

@@ -6,6 +6,7 @@ import {
   buildRelationshipTensionCandidates,
   buildCrossInsightCandidates,
   buildDecisionEvolutionCandidates,
+  buildGoalTargetApproachingCandidates,
 } from '../src/modules/insights/insightsEngine.js';
 import { selectRelatedFacts } from '../src/modules/insights/insightsService.js';
 import type {
@@ -15,6 +16,7 @@ import type {
   SourceInsightForSynthesis,
   RawDecisionForEvolution,
   RawDecisionHistoryRow,
+  RawGoalWithTargetDate,
 } from '../src/modules/insights/insightsEngine.js';
 import {
   computeNeglectedGoalConfidence,
@@ -23,6 +25,7 @@ import {
   computeRelationshipTensionConfidence,
   computeCrossInsightConfidence,
   computeDecisionEvolutionConfidence,
+  computeGoalTargetApproachingConfidence,
 } from '../src/modules/insights/confidence.js';
 import {
   computeNeglectedGoalTemporalState,
@@ -32,6 +35,7 @@ import {
   isRelationshipTensionResolved,
   computeCrossInsightTemporalState,
   computeDecisionEvolutionTemporalState,
+  computeGoalTargetApproachingTemporalState,
 } from '../src/modules/insights/temporal.js';
 import {
   NEGLECTED_GOAL_STALENESS_DAYS,
@@ -45,6 +49,8 @@ import {
   MIN_SYNTHESIS_SOURCE_CONFIDENCE,
   DECISION_EVOLUTION_RECURRING_TRANSITIONS,
   DECISION_EVOLUTION_STABLE_DAYS,
+  GOAL_TARGET_APPROACHING_WINDOW_DAYS,
+  GOAL_TARGET_APPROACHING_STABLE_DAYS,
 } from '../src/modules/insights/categories.js';
 
 const NOW = new Date('2026-06-01T00:00:00.000Z');
@@ -1147,6 +1153,74 @@ describe('computeDecisionEvolutionTemporalState (Phase 37)', () => {
 
   it('below the recurring threshold, an old transition is "stable"', () => {
     expect(computeDecisionEvolutionTemporalState(1, daysBefore(DECISION_EVOLUTION_STABLE_DAYS + 1), NOW)).toBe('stable');
+  });
+});
+
+describe('buildGoalTargetApproachingCandidates (Phase 40)', () => {
+  function goalWithTarget(overrides: Partial<RawGoalWithTargetDate> & { entityId: string }): RawGoalWithTargetDate {
+    return { name: 'Ship the launch plan', targetDate: daysBefore(-10), ...overrides };
+  }
+
+  it('a goal whose target date is well within the window qualifies', () => {
+    const candidates = buildGoalTargetApproachingCandidates([goalWithTarget({ entityId: 'g1', targetDate: daysBefore(-10) })], NOW);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]!.insightType).toBe('goal_target_approaching');
+    expect(candidates[0]!.subjectKey).toBe('g1');
+    expect(candidates[0]!.subjectEntityId).toBe('g1');
+    expect(candidates[0]!.statusClass).toBe('observed');
+    expect(candidates[0]!.evidence).toEqual([{ evidenceType: 'entity', entityId: 'g1', text: null, observedAt: daysBefore(-10) }]);
+  });
+
+  it('a goal whose target date has already passed never qualifies — this detector only claims "approaching", never "overdue"', () => {
+    const candidates = buildGoalTargetApproachingCandidates([goalWithTarget({ entityId: 'g1', targetDate: daysBefore(1) })], NOW);
+    expect(candidates).toEqual([]);
+  });
+
+  it('a goal whose target date is beyond the window never qualifies', () => {
+    const candidates = buildGoalTargetApproachingCandidates(
+      [goalWithTarget({ entityId: 'g1', targetDate: daysBefore(-(GOAL_TARGET_APPROACHING_WINDOW_DAYS + 5)) })],
+      NOW,
+    );
+    expect(candidates).toEqual([]);
+  });
+
+  it('a target date exactly at "today" qualifies with an honest same-day description', () => {
+    const candidates = buildGoalTargetApproachingCandidates([goalWithTarget({ entityId: 'g1', targetDate: NOW })], NOW);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]!.description).toContain('today');
+  });
+
+  it('never fabricates a candidate for a goal with no real target date — callers must filter those out before calling this builder', () => {
+    // Documentation test: the type signature itself requires a real Date, never null/undefined —
+    // a goal with no target date should never reach this builder at all (see computeGoalTargetApproachingInsights's filter).
+    const candidates = buildGoalTargetApproachingCandidates([], NOW);
+    expect(candidates).toEqual([]);
+  });
+});
+
+describe('computeGoalTargetApproachingConfidence (Phase 40)', () => {
+  it('a closer target date yields higher confidence than a farther one', () => {
+    const close = computeGoalTargetApproachingConfidence({ daysUntilTarget: 1, windowDays: GOAL_TARGET_APPROACHING_WINDOW_DAYS });
+    const far = computeGoalTargetApproachingConfidence({ daysUntilTarget: GOAL_TARGET_APPROACHING_WINDOW_DAYS, windowDays: GOAL_TARGET_APPROACHING_WINDOW_DAYS });
+    expect(close).toBeGreaterThan(far);
+  });
+
+  it('is always within [0, 1]', () => {
+    expect(computeGoalTargetApproachingConfidence({ daysUntilTarget: 0, windowDays: GOAL_TARGET_APPROACHING_WINDOW_DAYS })).toBeLessThanOrEqual(1);
+    expect(
+      computeGoalTargetApproachingConfidence({ daysUntilTarget: GOAL_TARGET_APPROACHING_WINDOW_DAYS, windowDays: GOAL_TARGET_APPROACHING_WINDOW_DAYS }),
+    ).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('computeGoalTargetApproachingTemporalState (Phase 40)', () => {
+  it('within the stable-days threshold reads as "stable" (imminent)', () => {
+    expect(computeGoalTargetApproachingTemporalState(GOAL_TARGET_APPROACHING_STABLE_DAYS)).toBe('stable');
+    expect(computeGoalTargetApproachingTemporalState(0)).toBe('stable');
+  });
+
+  it('beyond the stable-days threshold reads as "emerging" (still some runway)', () => {
+    expect(computeGoalTargetApproachingTemporalState(GOAL_TARGET_APPROACHING_STABLE_DAYS + 1)).toBe('emerging');
   });
 });
 

@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { memories, memoryEntities, type Queryable } from '@twin/db';
-import { getEntityById, type EntityRow } from '../entities/entities.service.js';
+import type { EntitySubtype } from '@twin/contracts';
+import { getEntityById, getEntitySubtype, type EntityRow } from '../entities/entities.service.js';
 import type { MemoryWithRelations } from '../memories/memories.service.js';
 import {
   listEntityRelationships,
@@ -28,6 +29,8 @@ export interface RelationshipWithConnectedEntity {
 
 export interface EntityDetail {
   entity: EntityRow;
+  /** Phase 40: the entity's real 1:1 subtype data (project status/dates, goal status/targetDate, event startsAt/endsAt/location, etc.) when its type has one and a row exists — null otherwise, never fabricated. */
+  subtype: EntitySubtype | null;
   relationships: RelationshipWithConnectedEntity[];
   supportingMemories: MemoryWithRelations[];
 }
@@ -65,8 +68,9 @@ export async function getEntityDetail(db: Queryable, userId: string, entityId: s
     .filter((r): r is RelationshipWithConnectedEntity => r !== null);
 
   const supportingMemories = await getSupportingMemories(db, userId, entityId);
+  const subtype = await getEntitySubtype(db, entity.entityType, entityId);
 
-  return { entity, relationships, supportingMemories };
+  return { entity, subtype, relationships, supportingMemories };
 }
 
 /** Every non-archived memory directly linked to this entity (via memory_entities), most recent first. */

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { entityTypeSchema, epistemicStatusSchema, sourceTypeSchema } from './memory.js';
+import { entityTypeSchema, entitySubtypeSchema, epistemicStatusSchema, sourceTypeSchema } from './memory.js';
 import { rankingSignalsDtoSchema } from './retrieval.js';
 import { personalModelCategorySchema, factTemporalStateSchema } from './personalModel.js';
 import { insightTypeSchema, insightStatusClassSchema, insightTemporalStateSchema } from './insights.js';
@@ -102,6 +102,8 @@ export const contextEntityItemSchema = z.object({
   /** 'target' = explicitly requested by the caller; 'direct' = named in the query text; 'expanded' = reached via bounded graph traversal from a direct/target entity. */
   matchType: z.enum(['target', 'direct', 'expanded']),
   hopDistance: z.number().int().min(0),
+  /** Phase 40: the entity's real subtype data (project status/dates, goal status/targetDate, event startsAt/endsAt/location, decision status/outcome), when present — lets a grounded answer about "Project X" or "Goal Y" cite its actual recorded state instead of only its name and connections. Null for 'idea' or when no subtype row exists yet; never fabricated. */
+  subtype: entitySubtypeSchema.nullable(),
 });
 export type ContextEntityItem = z.infer<typeof contextEntityItemSchema>;
 

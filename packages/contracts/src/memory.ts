@@ -76,6 +76,27 @@ export const entityDtoSchema = z.object({
 });
 export type EntityDto = z.infer<typeof entityDtoSchema>;
 
+/**
+ * Phase 40 — the real, already-populated 1:1 subtype data
+ * (packages/db/src/schema/{people,projects,goals,events,decisions}.ts)
+ * for entity types that have one, exposed generically wherever an
+ * entity's own detail genuinely matters (graph entity detail, Context
+ * Engine entity items) — not duplicated into a second source of truth,
+ * just read straight off the existing subtype row. 'idea' has no
+ * subtype table and is therefore never represented here. Every field
+ * reflects only what has actually been recorded (via manual creation
+ * or real extraction, packages/db's own NOT NULL/nullable contract) —
+ * never fabricated, never a default presented as a fact.
+ */
+export const entitySubtypeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('person'), role: z.string().nullable(), relationship: z.string().nullable() }),
+  z.object({ kind: z.literal('project'), status: z.string(), startedAt: z.string().nullable(), completedAt: z.string().nullable() }),
+  z.object({ kind: z.literal('goal'), status: z.string(), targetDate: z.string().nullable(), achievedAt: z.string().nullable() }),
+  z.object({ kind: z.literal('event'), startsAt: z.string(), endsAt: z.string().nullable(), location: z.string().nullable() }),
+  z.object({ kind: z.literal('decision'), status: z.string(), outcome: z.string().nullable(), decidedAt: z.string().nullable() }),
+]);
+export type EntitySubtype = z.infer<typeof entitySubtypeSchema>;
+
 export const memoryEntityLinkDtoSchema = z.object({
   id: z.string().uuid(),
   memoryId: z.string().uuid(),

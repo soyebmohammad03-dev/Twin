@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { entityDtoSchema, epistemicStatusSchema, memoryDetailDtoSchema } from './memory.js';
+import { entityDtoSchema, entitySubtypeSchema, epistemicStatusSchema, memoryDetailDtoSchema } from './memory.js';
 
 /**
  * Contracts for Phase 7's knowledge graph API
@@ -32,6 +32,8 @@ export type ConnectedRelationshipDto = z.infer<typeof connectedRelationshipDtoSc
 
 export const entityDetailResponseSchema = z.object({
   entity: entityDtoSchema,
+  /** Phase 40: the entity's real subtype data (project/goal/event/person/decision), when present — null for 'idea' or when no subtype row exists yet. */
+  subtype: entitySubtypeSchema.nullable(),
   relationships: z.array(connectedRelationshipDtoSchema),
   supportingMemories: z.array(memoryDetailDtoSchema),
 });

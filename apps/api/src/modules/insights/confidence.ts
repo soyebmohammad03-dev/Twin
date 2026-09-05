@@ -155,3 +155,16 @@ export function computeDecisionEvolutionConfidence(input: { transitionCount: num
   const base = Math.min(0.4 + 0.15 * input.transitionCount, 0.85);
   return Math.max(0, Math.min(1, input.hasReversal ? Math.min(base + 0.1, 0.95) : base));
 }
+
+/**
+ * Confidence for a goal_target_approaching insight — deliberately
+ * simple, since the underlying fact (a real, user-recorded target
+ * date) is never in doubt: this measures only how imminent it is, not
+ * whether the deadline itself is trustworthy. Closer dates read as
+ * more confidently "worth surfacing now" than a target date a month
+ * out, which is real but less urgent context.
+ */
+export function computeGoalTargetApproachingConfidence(input: { daysUntilTarget: number; windowDays: number }): number {
+  const progress = 1 - Math.max(0, Math.min(input.daysUntilTarget, input.windowDays)) / input.windowDays;
+  return Math.max(0, Math.min(1, 0.5 + progress * 0.3));
+}

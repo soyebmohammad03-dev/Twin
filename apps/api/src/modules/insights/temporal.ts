@@ -7,6 +7,7 @@ import {
   CROSS_INSIGHT_STABLE_DAYS,
   DECISION_EVOLUTION_RECURRING_TRANSITIONS,
   DECISION_EVOLUTION_STABLE_DAYS,
+  GOAL_TARGET_APPROACHING_STABLE_DAYS,
 } from './categories.js';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -125,4 +126,11 @@ export function computeDecisionEvolutionTemporalState(transitionCount: number, l
   if (transitionCount >= DECISION_EVOLUTION_RECURRING_TRANSITIONS) return 'recurring';
   const ageDays = (now.getTime() - lastObservedAt.getTime()) / MS_PER_DAY;
   return ageDays >= DECISION_EVOLUTION_STABLE_DAYS ? 'stable' : 'emerging';
+}
+
+/** The two temporalState values a goal_target_approaching insight can produce — 'stable' meaning imminent (within GOAL_TARGET_APPROACHING_STABLE_DAYS), 'emerging' meaning still some runway. Neither implies risk or lateness — this detector never fires once the target date has passed. */
+export type GoalTargetApproachingTemporalState = 'emerging' | 'stable';
+
+export function computeGoalTargetApproachingTemporalState(daysUntilTarget: number): GoalTargetApproachingTemporalState {
+  return daysUntilTarget <= GOAL_TARGET_APPROACHING_STABLE_DAYS ? 'stable' : 'emerging';
 }
