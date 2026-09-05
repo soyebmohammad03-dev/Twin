@@ -4,6 +4,7 @@ import { INITIAL_USER } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 import { API_BASE_URL } from '../services/authService';
 import { ToggleSwitch } from './ToggleSwitch';
+import { NotificationSettingsSection } from './NotificationSettingsSection';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -473,27 +474,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                     Notifications
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-500 dark:text-white/60 mt-1">
-                    Twin doesn't send email or push notifications yet. This preference is saved for
-                    when that capability ships.
+                    Real, evidence-backed notifications only — never a fabricated alert.
                   </p>
                 </div>
-
-                <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/25 flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1 pr-2">
-                    <h4 className="font-semibold text-sm text-indigo-950 dark:text-indigo-200 truncate">
-                      Notify me when available
-                    </h4>
-                    <p className="text-xs text-indigo-800/80 dark:text-indigo-300/80 mt-0.5 leading-relaxed">
-                      Opt in now so briefings and reminders reach you as soon as delivery exists
-                    </p>
-                  </div>
-                  <ToggleSwitch
-                    checked={preferences.masterNotifications}
-                    onChange={(checked) => updatePreferences({ masterNotifications: checked })}
-                    color="indigo"
-                    ariaLabel="Notify me when available"
-                  />
-                </div>
+                <NotificationSettingsSection />
               </div>
             )}
 

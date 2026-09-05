@@ -15,4 +15,5 @@ export * from './entityRelationships.js';
 export * from './ingestionJobs.js';
 export * from './personalModel.js';
 export * from './insights.js';
+export * from './notifications.js';
 export * from './relations.js';

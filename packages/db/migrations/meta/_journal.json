@@ -134,6 +134,13 @@
       "when": 1788636600829,
       "tag": "0018_memory_corrections",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788648048522,
+      "tag": "0019_useful_multiple_man",
+      "breakpoints": true
     }
   ]
 }

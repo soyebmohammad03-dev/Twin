@@ -575,6 +575,7 @@ const TwinAppInner: React.FC = () => {
         onOpenCapture={() => setIsCaptureOpen(true)}
         onSelectTab={setCurrentTab}
         onOpenAccountSection={(sec) => setActiveAccountSection(sec)}
+        onOpenInsight={(insightId) => setSelectedInsightId(insightId)}
       />
 
       {/* Main View Area with fluid Page Transition Animations */}

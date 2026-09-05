@@ -62,7 +62,6 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   proactivityLevel: 'balanced',
   autoSynthesis: true,
   soundEffects: false,
-  masterNotifications: true,
   biometricLock: true,
   autoLockMinutes: '15',
   micAccess: true,

@@ -22,9 +22,12 @@ export interface UserPreferences {
   proactivityLevel: 'subtle' | 'balanced' | 'expressive';
   autoSynthesis: boolean;
   soundEffects: boolean;
-  // Notifications — Twin has no delivery mechanism (email/push) yet; this
-  // is a single honest opt-in for when that capability ships.
-  masterNotifications: boolean;
+  // Notification preferences (masterEnabled/patternAlertsEnabled) are
+  // real, server-persisted state as of Phase 46 — see
+  // notificationsApi.ts and NotificationSettingsSection.tsx. They live
+  // in notification_preferences, not here, because generation happens
+  // server-side (POST /insights/rebuild) and a client-only preference
+  // could never honestly gate that.
   // Privacy & Security
   biometricLock: boolean;
   autoLockMinutes: 'immediate' | '5' | '15' | 'never';

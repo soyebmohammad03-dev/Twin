@@ -24,6 +24,7 @@ import { registerContextRoutes } from './modules/context/context.routes.js';
 import { registerReasoningRoutes } from './modules/context/reasoning.routes.js';
 import { registerPersonalModelRoutes } from './modules/personalModel/personalModel.routes.js';
 import { registerInsightsRoutes } from './modules/insights/insights.routes.js';
+import { registerNotificationRoutes } from './modules/notifications/notifications.routes.js';
 import { registerChatRoutes } from './modules/chat/chat.routes.js';
 import { registerDecisionRoutes } from './modules/decisions/decisions.routes.js';
 
@@ -83,6 +84,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(registerReasoningRoutes, { prefix: '/reason' });
   await app.register(registerPersonalModelRoutes, { prefix: '/twin' });
   await app.register(registerInsightsRoutes, { prefix: '/insights' });
+  await app.register(registerNotificationRoutes, { prefix: '/notifications' });
   await app.register(registerChatRoutes, { prefix: '/chat' });
   await app.register(registerDecisionRoutes, { prefix: '/decisions' });
 

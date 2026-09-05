@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { TabType, ThemeMode, ThemePreference, AccountSection } from '../types';
 import { INITIAL_USER } from '../data/mockData';
 import { AccountMenu } from './AccountMenu';
+import { NotificationCenter } from './NotificationCenter';
 import { useApp } from '../context/AppContext';
 
 interface TopAppBarProps {
@@ -14,6 +15,7 @@ interface TopAppBarProps {
   onOpenCapture: () => void;
   onSelectTab: (tab: TabType) => void;
   onOpenAccountSection: (section: AccountSection) => void;
+  onOpenInsight: (insightId: string) => void;
 }
 
 export const TopAppBar: React.FC<TopAppBarProps> = ({
@@ -25,6 +27,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   onOpenCapture,
   onSelectTab,
   onOpenAccountSection,
+  onOpenInsight,
 }) => {
   const { userProfile } = useApp();
   const isDark = theme === 'dark';
@@ -99,6 +102,9 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
         >
           <span className="material-symbols-outlined text-[18px]">add</span>
         </button>
+
+        {/* Notifications */}
+        <NotificationCenter onOpenInsight={onOpenInsight} />
 
         {/* Theme Toggle */}
         <button

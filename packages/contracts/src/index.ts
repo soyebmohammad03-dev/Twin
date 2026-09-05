@@ -7,5 +7,6 @@ export * from './graph.js';
 export * from './context.js';
 export * from './personalModel.js';
 export * from './insights.js';
+export * from './notifications.js';
 export * from './chat.js';
 export * from './decisions.js';

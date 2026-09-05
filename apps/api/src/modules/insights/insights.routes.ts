@@ -21,6 +21,7 @@ import { authenticate, getAuthenticatedUserId } from '../../plugins/authenticate
 import { toMemoryDetailDto } from '../memories/memories.routes.js';
 import { attachEntityInfo as attachPersonalModelEntityInfo, toFactDto } from '../personalModel/personalModel.routes.js';
 import { rebuildInsights } from './insightsStore.js';
+import { generatePatternNotifications } from '../notifications/notificationsService.js';
 import {
   getCurrentInsights,
   getInsightEvidence,
@@ -134,6 +135,12 @@ export async function registerInsightsRoutes(app: FastifyInstance) {
     async (request) => {
       const userId = getAuthenticatedUserId(request);
       const result = await rebuildInsights(app.db, userId);
+      // Phase 46: the sole trigger point for notification generation —
+      // never a timer. Reuses the same read GET / already uses, so a
+      // notification only ever exists for an insight this exact
+      // response also reports as currently live.
+      const currentInsights = await getCurrentInsights(app.db, userId);
+      await generatePatternNotifications(app.db, userId, currentInsights);
       const response: RebuildInsightsResponse = {
         insightCount: result.insightCount,
         generatedAt: new Date().toISOString(),
