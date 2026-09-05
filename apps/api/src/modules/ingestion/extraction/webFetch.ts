@@ -5,6 +5,7 @@ export class WebFetchError extends Error {}
 
 const MAX_RESPONSE_BYTES = 1_000_000; // 1MB
 const FETCH_TIMEOUT_MS = 8_000;
+const MAX_REDIRECTS = 5;
 
 /**
  * Fetches a URL and extracts its visible text — real HTTP + HTML
@@ -15,25 +16,22 @@ const FETCH_TIMEOUT_MS = 8_000;
  * validating the IP actually connected to, not just resolved) —
  * acceptable for a foundation phase, called out here as a known
  * limitation rather than left undocumented.
+ *
+ * Phase 43: redirects are followed MANUALLY (`redirect: 'manual'`),
+ * never automatically — `redirect: 'follow'` would let a URL that
+ * passes the initial public-host check redirect to an internal/
+ * metadata address (e.g. http://169.254.169.254/...) with zero further
+ * validation, a classic SSRF bypass. Every hop is scheme- and
+ * host-checked exactly like the original URL, bounded by MAX_REDIRECTS.
  */
 export async function fetchAndExtractText(url: string): Promise<{ title: string | null; text: string }> {
-  const parsed = new URL(url);
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new WebFetchError(`Unsupported URL scheme: ${parsed.protocol}`);
-  }
-
-  await assertPublicHost(parsed.hostname);
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let response: Response;
   try {
-    response = await fetch(parsed.toString(), {
-      signal: controller.signal,
-      redirect: 'follow',
-      headers: { 'User-Agent': 'TwinBot/0.1 (+ingestion; no AI, plain text extraction only)' },
-    });
+    response = await fetchFollowingValidatedRedirects(url, controller.signal);
   } catch (err) {
+    if (err instanceof WebFetchError) throw err;
     throw new WebFetchError(`Could not reach ${url}: ${err instanceof Error ? err.message : 'unknown error'}`);
   } finally {
     clearTimeout(timeout);
@@ -50,6 +48,44 @@ export async function fetchAndExtractText(url: string): Promise<{ title: string 
 
   const html = await readBodyWithLimit(response, url);
   return { title: extractTitle(html), text: htmlToText(html) };
+}
+
+/**
+ * Validates scheme + host, then fetches with redirects disabled
+ * (`redirect: 'manual'`), following any redirect response by hand:
+ * each `Location` target is re-validated exactly like the original URL
+ * before it's ever fetched, so a redirect can never reach a host the
+ * initial check would have rejected. Bounded by MAX_REDIRECTS.
+ */
+async function fetchFollowingValidatedRedirects(url: string, signal: AbortSignal): Promise<Response> {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const parsed = new URL(current);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new WebFetchError(`Unsupported URL scheme: ${parsed.protocol}`);
+    }
+    await assertPublicHost(parsed.hostname);
+
+    const response = await fetch(parsed.toString(), {
+      signal,
+      redirect: 'manual',
+      headers: { 'User-Agent': 'TwinBot/0.1 (+ingestion; no AI, plain text extraction only)' },
+    });
+
+    // Fetch reports a blocked/followed-by-undici redirect as an
+    // "opaqueredirect" response (status 0) when redirect:'manual' is
+    // used with the undici-backed global fetch — treat that the same
+    // as an explicit 3xx: read Location and re-validate by hand.
+    const isRedirect = response.status >= 300 && response.status < 400;
+    if (!isRedirect) return response;
+
+    const location = response.headers.get('location');
+    if (!location) {
+      throw new WebFetchError(`Redirect response from ${current} had no Location header.`);
+    }
+    current = new URL(location, parsed).toString();
+  }
+  throw new WebFetchError(`Too many redirects (> ${MAX_REDIRECTS}) starting from ${url}.`);
 }
 
 async function readBodyWithLimit(response: Response, url: string): Promise<string> {
