@@ -1,5 +1,5 @@
-import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
-import { decisions, entities, entityRelationships, memories, memoryEntities, type Queryable, type Database } from '@twin/db';
+import { and, asc, desc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { decisionHistory, decisions, entities, entityRelationships, memories, memoryEntities, type Queryable, type Database } from '@twin/db';
 import { createEntity, getEntityById, type EntityRow } from '../entities/entities.service.js';
 
 export class DecisionError extends Error {
@@ -171,9 +171,44 @@ export async function updateDecision(
     return { entity, decision: decision! };
   }
 
+  const [before] = await db.select().from(decisions).where(eq(decisions.entityId, entityId)).limit(1);
+  if (!before) {
+    throw new Error(`Decision ${entityId} has no decision record.`);
+  }
+
   const [decision] = await db.update(decisions).set(patch).where(eq(decisions.entityId, entityId)).returning();
   if (!decision) {
     throw new Error(`Decision update returned no row for ${entityId}.`);
   }
+
+  // Only a real transition gets recorded — a PATCH that resolves to the
+  // same status/outcome/decidedAt (e.g. re-sending the current outcome)
+  // is not a change and must not appear in the history timeline.
+  const changed =
+    before.status !== decision.status ||
+    before.outcome !== decision.outcome ||
+    before.decidedAt?.getTime() !== decision.decidedAt?.getTime();
+  if (changed) {
+    await db.insert(decisionHistory).values({
+      entityId,
+      previousStatus: before.status,
+      newStatus: decision.status,
+      previousOutcome: before.outcome,
+      newOutcome: decision.outcome,
+      previousDecidedAt: before.decidedAt,
+      newDecidedAt: decision.decidedAt,
+    });
+  }
+
   return { entity, decision };
+}
+
+/** A decision's real status/outcome/decidedAt transitions, oldest first — ownership-checked the same way as getDecisionById. */
+export async function listDecisionHistory(db: Queryable, userId: string, entityId: string) {
+  await getDecisionById(db, userId, entityId);
+  return db
+    .select()
+    .from(decisionHistory)
+    .where(eq(decisionHistory.entityId, entityId))
+    .orderBy(asc(decisionHistory.changedAt));
 }

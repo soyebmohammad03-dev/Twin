@@ -5,6 +5,7 @@ export * from './people.js';
 export * from './projects.js';
 export * from './goals.js';
 export * from './decisions.js';
+export * from './decisionHistory.js';
 export * from './events.js';
 export * from './sources.js';
 export * from './memories.js';

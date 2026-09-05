@@ -7,9 +7,11 @@ import {
   decisionDtoSchema,
   listDecisionsResponseSchema,
   decisionDetailResponseSchema,
+  listDecisionHistoryResponseSchema,
   errorResponseSchema,
   type DecisionDto,
   type DecisionDetailResponse,
+  type ListDecisionHistoryResponse,
   type EntityDto,
 } from '@twin/contracts';
 import { authenticate, getAuthenticatedUserId } from '../../plugins/authenticate.js';
@@ -18,6 +20,7 @@ import {
   listDecisions,
   getDecisionById,
   updateDecision,
+  listDecisionHistory,
   decisionIdsWithEvidence,
   DecisionError,
   type DecisionWithEntity,
@@ -190,6 +193,36 @@ export async function registerDecisionRoutes(app: FastifyInstance) {
         });
         const evidenceIds = await decisionIdsWithEvidence(app.db, userId, [request.params.id]);
         return toDecisionDto(result, evidenceIds.has(request.params.id));
+      } catch (err) {
+        return handleDecisionError(err, request, reply);
+      }
+    },
+  );
+
+  server.get(
+    '/:id/history',
+    {
+      preHandler: authenticate,
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+        response: { 200: listDecisionHistoryResponseSchema, 404: errorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const userId = getAuthenticatedUserId(request);
+      try {
+        const rows = await listDecisionHistory(app.db, userId, request.params.id);
+        const response: ListDecisionHistoryResponse = rows.map((row) => ({
+          id: row.id,
+          previousStatus: row.previousStatus as DecisionDto['status'],
+          newStatus: row.newStatus as DecisionDto['status'],
+          previousOutcome: row.previousOutcome,
+          newOutcome: row.newOutcome,
+          previousDecidedAt: row.previousDecidedAt?.toISOString() ?? null,
+          newDecidedAt: row.newDecidedAt?.toISOString() ?? null,
+          changedAt: row.changedAt.toISOString(),
+        }));
+        return response;
       } catch (err) {
         return handleDecisionError(err, request, reply);
       }

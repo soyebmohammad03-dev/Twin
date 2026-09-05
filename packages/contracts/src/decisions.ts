@@ -110,3 +110,29 @@ export const decisionDetailResponseSchema = z.object({
   context: decisionContextSchema,
 });
 export type DecisionDetailResponse = z.infer<typeof decisionDetailResponseSchema>;
+
+/**
+ * Phase 36 — one real, immutable record of a status/outcome/decidedAt
+ * transition (packages/db/src/schema/decisionHistory.ts), written only
+ * when decisions.service.ts's updateDecision detects an actual change.
+ * This is what makes "how did this decision change over time?"
+ * answerable at all — the `decisions` table itself only ever holds the
+ * CURRENT state. Every field here is a fact about what the user
+ * genuinely did, never an inference: reversing a decision or editing
+ * its outcome previously discarded the prior value with no trace.
+ */
+export const decisionHistoryEntrySchema = z.object({
+  id: z.string().uuid(),
+  previousStatus: decisionStatusSchema,
+  newStatus: decisionStatusSchema,
+  previousOutcome: z.string().nullable(),
+  newOutcome: z.string().nullable(),
+  previousDecidedAt: z.string().nullable(),
+  newDecidedAt: z.string().nullable(),
+  changedAt: z.string(),
+});
+export type DecisionHistoryEntry = z.infer<typeof decisionHistoryEntrySchema>;
+
+/** Oldest first — a real timeline reads top-to-bottom as "what happened, in order," not newest-first like an activity feed. */
+export const listDecisionHistoryResponseSchema = z.array(decisionHistoryEntrySchema);
+export type ListDecisionHistoryResponse = z.infer<typeof listDecisionHistoryResponseSchema>;

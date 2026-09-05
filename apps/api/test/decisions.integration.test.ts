@@ -401,4 +401,147 @@ describe('Phase 25 decisions — real database', () => {
       expect(body.citedMemoryIds).toEqual([]);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 36 — decision history: a real, append-only record of status/
+  // outcome/decidedAt transitions, never fabricated and never lost.
+  // -------------------------------------------------------------------------
+
+  describe('GET /decisions/:id/history', () => {
+    it('a freshly created decision has no history yet — an honest empty array, not fabricated', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/decisions',
+        headers: authHeader(userToken),
+        payload: { name: 'Fresh Decision, No History Yet' },
+      });
+      const response = await app.inject({
+        method: 'GET',
+        url: `/decisions/${created.json().id}/history`,
+        headers: authHeader(userToken),
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual([]);
+    });
+
+    it('a no-op patch (same values) never creates a history row', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/decisions',
+        headers: authHeader(userToken),
+        payload: { name: 'No-Op Patch Decision', status: 'decided', outcome: 'Kept as is', decidedAt: '2024-01-01T00:00:00.000Z' },
+      });
+      const id = created.json().id;
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/decisions/${id}`,
+        headers: authHeader(userToken),
+        payload: { status: 'decided', outcome: 'Kept as is', decidedAt: '2024-01-01T00:00:00.000Z' },
+      });
+
+      const response = await app.inject({ method: 'GET', url: `/decisions/${id}/history`, headers: authHeader(userToken) });
+      expect(response.json()).toEqual([]);
+    });
+
+    it('a real status/outcome change writes exactly one accurate history row', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/decisions',
+        headers: authHeader(userToken),
+        payload: { name: 'Decision With Real History' },
+      });
+      const id = created.json().id;
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/decisions/${id}`,
+        headers: authHeader(userToken),
+        payload: { status: 'decided', outcome: 'Went with option A' },
+      });
+
+      const response = await app.inject({ method: 'GET', url: `/decisions/${id}/history`, headers: authHeader(userToken) });
+      expect(response.statusCode).toBe(200);
+      const rows = response.json();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].previousStatus).toBe('open');
+      expect(rows[0].newStatus).toBe('decided');
+      expect(rows[0].previousOutcome).toBeNull();
+      expect(rows[0].newOutcome).toBe('Went with option A');
+    });
+
+    it('multiple real changes accumulate in chronological (oldest-first) order', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/decisions',
+        headers: authHeader(userToken),
+        payload: { name: 'Multi-Change Decision' },
+      });
+      const id = created.json().id;
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/decisions/${id}`,
+        headers: authHeader(userToken),
+        payload: { status: 'decided', outcome: 'Chose A' },
+      });
+      await app.inject({
+        method: 'PATCH',
+        url: `/decisions/${id}`,
+        headers: authHeader(userToken),
+        payload: { status: 'reversed' },
+      });
+
+      const response = await app.inject({ method: 'GET', url: `/decisions/${id}/history`, headers: authHeader(userToken) });
+      const rows = response.json();
+      expect(rows).toHaveLength(2);
+      expect(rows[0].newStatus).toBe('decided');
+      expect(rows[1].previousStatus).toBe('decided');
+      expect(rows[1].newStatus).toBe('reversed');
+      expect(new Date(rows[0].changedAt).getTime()).toBeLessThanOrEqual(new Date(rows[1].changedAt).getTime());
+    });
+
+    it('security: cannot view another user’s decision history', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/decisions',
+        headers: authHeader(userToken),
+        payload: { name: 'Private History Decision' },
+      });
+      const id = created.json().id;
+      await app.inject({
+        method: 'PATCH',
+        url: `/decisions/${id}`,
+        headers: authHeader(userToken),
+        payload: { status: 'decided' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/decisions/${id}/history`,
+        headers: authHeader(otherToken),
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 for a non-existent decision id', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/decisions/00000000-0000-0000-0000-000000000000/history',
+        headers: authHeader(userToken),
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('rejects an unauthenticated request', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/decisions',
+        headers: authHeader(userToken),
+        payload: { name: 'Auth Required History' },
+      });
+      const response = await app.inject({ method: 'GET', url: `/decisions/${created.json().id}/history` });
+      expect(response.statusCode).toBe(401);
+    });
+  });
 });

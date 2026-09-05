@@ -10,6 +10,7 @@ import type {
   CreateDecisionRequest,
   UpdateDecisionRequest,
   GroundedResponse,
+  ListDecisionHistoryResponse,
 } from '@twin/contracts';
 import { authorizedFetch, parseOrThrow } from './apiClient';
 
@@ -49,5 +50,10 @@ export const decisionsApi = {
       }),
     });
     return parseOrThrow<GroundedResponse>(response);
+  },
+
+  async getHistory(id: string): Promise<ListDecisionHistoryResponse> {
+    const response = await authorizedFetch(`/decisions/${id}/history`);
+    return parseOrThrow<ListDecisionHistoryResponse>(response);
   },
 };

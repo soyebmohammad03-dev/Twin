@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { DecisionDetailResponse, DecisionStatus, GroundedResponse, SupportLevel } from '@twin/contracts';
+import type { DecisionDetailResponse, DecisionStatus, GroundedResponse, ListDecisionHistoryResponse, SupportLevel } from '@twin/contracts';
 import { decisionsApi } from '../services/decisionsApi';
 import { graphApi } from '../services/graphApi';
 import { toMemoryItem } from '../services/memoryMapper';
@@ -85,12 +85,24 @@ export const DecisionDetailModal: React.FC<DecisionDetailModalProps> = ({
   const [explaining, setExplaining] = useState(false);
   const [explainError, setExplainError] = useState<string | null>(null);
 
+  const [history, setHistory] = useState<ListDecisionHistoryResponse | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
   function refresh(id: string) {
     return decisionsApi.getDetail(id).then((refreshed) => {
       setDetail(refreshed);
       onDecisionChanged?.(refreshed.decision);
+      refreshHistory(id);
       return refreshed;
     });
+  }
+
+  function refreshHistory(id: string) {
+    setHistoryError(null);
+    return decisionsApi
+      .getHistory(id)
+      .then((rows) => setHistory(rows))
+      .catch(() => setHistoryError('Could not load history.'));
   }
 
   useEffect(() => {
@@ -100,6 +112,8 @@ export const DecisionDetailModal: React.FC<DecisionDetailModalProps> = ({
       setExplainError(null);
       setIsEditingOutcome(false);
       setConfirmingDeleteId(null);
+      setHistory(null);
+      setHistoryError(null);
       return;
     }
     let cancelled = false;
@@ -109,6 +123,9 @@ export const DecisionDetailModal: React.FC<DecisionDetailModalProps> = ({
     setExplainError(null);
     setIsEditingOutcome(false);
     setConfirmingDeleteId(null);
+    setHistory(null);
+    setHistoryError(null);
+    refreshHistory(decisionId);
     decisionsApi
       .getDetail(decisionId)
       .then((result) => {
@@ -429,6 +446,49 @@ export const DecisionDetailModal: React.FC<DecisionDetailModalProps> = ({
                   refresh(detail.decision.id);
                 }}
               />
+            </div>
+
+            {/* History — real status/outcome/decidedAt transitions, oldest first */}
+            <div>
+              <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">History</h3>
+              {historyError && <p className="text-xs text-red-400 font-mono">{historyError}</p>}
+              {!historyError && history && history.length === 0 && (
+                <p className="text-xs text-slate-500 font-mono">No changes recorded yet.</p>
+              )}
+              {history && history.length > 0 && (
+                <div className="space-y-1.5">
+                  {history.map((entry) => (
+                    <div key={entry.id} className="liquid-glass rounded-xl p-2.5 border border-white/10 text-xs">
+                      <div className="text-[10px] font-mono text-slate-500">
+                        {new Date(entry.changedAt).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}
+                      </div>
+                      <div className="text-slate-700 dark:text-slate-300 mt-0.5">
+                        {entry.previousStatus !== entry.newStatus && (
+                          <span>
+                            Status: {STATUS_LABEL[entry.previousStatus]} → {STATUS_LABEL[entry.newStatus]}
+                          </span>
+                        )}
+                        {entry.previousOutcome !== entry.newOutcome && (
+                          <div>Outcome: {entry.previousOutcome || <em className="text-slate-500">none</em>} → {entry.newOutcome || <em className="text-slate-500">none</em>}</div>
+                        )}
+                        {entry.previousDecidedAt !== entry.newDecidedAt && (
+                          <div>
+                            Decided date:{' '}
+                            {entry.previousDecidedAt ? new Date(entry.previousDecidedAt).toLocaleDateString() : <em className="text-slate-500">none</em>} →{' '}
+                            {entry.newDecidedAt ? new Date(entry.newDecidedAt).toLocaleDateString() : <em className="text-slate-500">none</em>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Grounded "why" explanation — reuses POST /reason, on demand */}
