@@ -9,8 +9,12 @@ import {
   getOrCreatePreferences,
   updatePreferences as storeUpdatePreferences,
   createFromInsight,
+  upsertPushSubscription,
+  deleteOwnedPushSubscription,
+  listPushSubscriptionsForUser,
   type NotificationRow,
   type NotificationPreferencesRow,
+  type PushSubscriptionRow,
 } from './notificationsStore.js';
 
 export class NotificationError extends Error {
@@ -61,9 +65,34 @@ export async function getPreferences(db: Queryable, userId: string): Promise<Not
 export async function updateNotificationPreferences(
   db: Queryable,
   userId: string,
-  patch: { masterEnabled?: boolean; patternAlertsEnabled?: boolean },
+  patch: {
+    masterEnabled?: boolean;
+    patternAlertsEnabled?: boolean;
+    morningBriefingEnabled?: boolean;
+    eveningSynthesisEnabled?: boolean;
+    timezone?: string;
+  },
 ): Promise<NotificationPreferencesRow> {
   return storeUpdatePreferences(db, userId, patch);
+}
+
+// --- Web Push subscription management ---
+
+export async function subscribeToPush(
+  db: Queryable,
+  userId: string,
+  args: { endpoint: string; p256dh: string; authKey: string },
+): Promise<PushSubscriptionRow> {
+  return upsertPushSubscription(db, userId, args);
+}
+
+/** Ownership-checked: a user can only remove a subscription that is actually theirs. */
+export async function unsubscribeFromPush(db: Queryable, userId: string, endpoint: string): Promise<boolean> {
+  return deleteOwnedPushSubscription(db, userId, endpoint);
+}
+
+export async function getPushSubscriptions(db: Queryable, userId: string): Promise<PushSubscriptionRow[]> {
+  return listPushSubscriptionsForUser(db, userId);
 }
 
 /**

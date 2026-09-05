@@ -9,6 +9,7 @@
   "scripts": {
     "dev:web": "npm run dev --workspace apps/web",
     "dev:api": "npm run build:packages && npm run dev --workspace apps/api",
+    "dev:worker": "npm run build:packages && npm run dev:worker --workspace apps/api",
     "build:packages": "npm run build --workspace packages/contracts --workspace packages/db",
     "build": "npm run build:packages && npm run build --workspace apps/api && npm run build --workspace apps/web",
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",

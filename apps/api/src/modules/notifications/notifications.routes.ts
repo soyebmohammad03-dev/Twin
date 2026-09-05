@@ -7,14 +7,19 @@ import {
   markAllReadResponseSchema,
   notificationPreferencesDtoSchema,
   updateNotificationPreferencesRequestSchema,
+  subscribeToPushRequestSchema,
+  unsubscribeFromPushRequestSchema,
+  vapidPublicKeyResponseSchema,
   errorResponseSchema,
   type NotificationDto,
   type NotificationsResponse,
   type NotificationActionResponse,
   type MarkAllReadResponse,
   type NotificationPreferencesDto,
+  type VapidPublicKeyResponse,
 } from '@twin/contracts';
 import { authenticate, getAuthenticatedUserId } from '../../plugins/authenticate.js';
+import { env } from '../../config/env.js';
 import {
   getNotifications,
   markNotificationRead,
@@ -22,6 +27,8 @@ import {
   markNotificationDelivered,
   getPreferences,
   updateNotificationPreferences,
+  subscribeToPush,
+  unsubscribeFromPush,
   NotificationError,
 } from './notificationsService.js';
 import type { NotificationRow, NotificationPreferencesRow } from './notificationsStore.js';
@@ -43,6 +50,9 @@ function toPreferencesDto(row: NotificationPreferencesRow): NotificationPreferen
   return {
     masterEnabled: row.masterEnabled,
     patternAlertsEnabled: row.patternAlertsEnabled,
+    morningBriefingEnabled: row.morningBriefingEnabled,
+    eveningSynthesisEnabled: row.eveningSynthesisEnabled,
+    timezone: row.timezone,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -153,6 +163,45 @@ export async function registerNotificationRoutes(app: FastifyInstance) {
         reply.code(handled.statusCode);
         return handled.body;
       }
+    },
+  );
+
+  // --- Web Push (Phase 47) ---
+
+  server.get(
+    '/push/vapid-public-key',
+    { preHandler: authenticate, schema: { response: { 200: vapidPublicKeyResponseSchema } } },
+    async () => {
+      // Public by design (VAPID's entire point) — the private key
+      // never leaves apps/api/src/worker/push.ts. Null, honestly,
+      // when this deployment hasn't configured a VAPID keypair — the
+      // frontend must not attempt pushManager.subscribe() in that case.
+      const response: VapidPublicKeyResponse = { publicKey: env.VAPID_PUBLIC_KEY ?? null };
+      return response;
+    },
+  );
+
+  server.post(
+    '/push/subscribe',
+    { preHandler: authenticate, schema: { body: subscribeToPushRequestSchema } },
+    async (request, reply) => {
+      const userId = getAuthenticatedUserId(request);
+      await subscribeToPush(app.db, userId, {
+        endpoint: request.body.endpoint,
+        p256dh: request.body.keys.p256dh,
+        authKey: request.body.keys.auth,
+      });
+      reply.code(204);
+    },
+  );
+
+  server.post(
+    '/push/unsubscribe',
+    { preHandler: authenticate, schema: { body: unsubscribeFromPushRequestSchema } },
+    async (request, reply) => {
+      const userId = getAuthenticatedUserId(request);
+      await unsubscribeFromPush(app.db, userId, request.body.endpoint);
+      reply.code(204);
     },
   );
 }

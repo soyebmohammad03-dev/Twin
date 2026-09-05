@@ -141,6 +141,13 @@
       "when": 1788648048522,
       "tag": "0019_useful_multiple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788649623968,
+      "tag": "0020_normal_miracleman",
+      "breakpoints": true
     }
   ]
 }

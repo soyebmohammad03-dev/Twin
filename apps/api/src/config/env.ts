@@ -75,6 +75,24 @@ const envSchema = z
     // change here.
     REASONING_MODEL: z.string().default('gemini-3.6-flash'),
     REASONING_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+    // Phase 47 — how often the background worker's scheduler cycle
+    // runs. Deliberately a plain setInterval loop, not a cron
+    // library: this project has no other job infrastructure, and a
+    // periodic scan with a DB-level idempotency constraint (see
+    // notifications.dedupeKey) is the smallest correct mechanism for
+    // "check every N minutes whether any user's local time now falls
+    // in a delivery window."
+    WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+    // Phase 47 Web Push. All three optional together: unset means push
+    // delivery is honestly disabled (worker still generates and
+    // persists notifications; only the push-send attempt is skipped)
+    // rather than silently failing or faking success. VAPID keys are
+    // self-generated (see `npx web-push generate-vapid-keys`), not a
+    // third-party account/credential — safe to create fresh per
+    // deployment. VAPID_PRIVATE_KEY never leaves this process.
+    VAPID_PUBLIC_KEY: z.string().optional(),
+    VAPID_PRIVATE_KEY: z.string().optional(),
+    VAPID_SUBJECT: z.string().optional(),
   })
   .refine((data) => data.EXTRACTION_PROVIDER !== 'gemini' || Boolean(data.GEMINI_API_KEY), {
     message: 'EXTRACTION_PROVIDER=gemini requires GEMINI_API_KEY to be set.',
