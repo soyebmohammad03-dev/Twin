@@ -22,18 +22,12 @@ export interface UserPreferences {
   proactivityLevel: 'subtle' | 'balanced' | 'expressive';
   autoSynthesis: boolean;
   soundEffects: boolean;
-  // Notifications
+  // Notifications — Twin has no delivery mechanism (email/push) yet; this
+  // is a single honest opt-in for when that capability ships.
   masterNotifications: boolean;
-  morningBriefing: boolean;
-  eveningRecap: boolean;
-  patternAlerts: boolean;
-  insightUpdates: boolean;
-  memoryReminders: boolean;
-  dailySummary: boolean;
   // Privacy & Security
   biometricLock: boolean;
   autoLockMinutes: 'immediate' | '5' | '15' | 'never';
-  incognitoMode: boolean;
   micAccess: boolean;
   retentionPeriod: 'forever' | '1year' | '90days';
 }

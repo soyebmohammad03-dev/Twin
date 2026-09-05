@@ -77,7 +77,7 @@ export const SignInView: React.FC<SignInViewProps> = ({ onNavigateToSignUp }) =>
               Welcome to Twin
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-white/60 mt-1.5 max-w-xs">
-              Access your personal intelligence model, encrypted memories, and private cognition vault.
+              Access your personal intelligence model and your memories, decisions, and insights.
             </p>
           </div>
 
@@ -133,9 +133,6 @@ export const SignInView: React.FC<SignInViewProps> = ({ onNavigateToSignUp }) =>
                 >
                   Vault Passcode / Key
                 </label>
-                <span className="text-[10px] text-indigo-500 font-mono">
-                  AES-256 GCM
-                </span>
               </div>
               <div className="relative">
                 <input
@@ -175,7 +172,7 @@ export const SignInView: React.FC<SignInViewProps> = ({ onNavigateToSignUp }) =>
               {isLoading ? (
                 <>
                   <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  <span>Decrypting Local Vault...</span>
+                  <span>Signing in...</span>
                 </>
               ) : isSuccess ? (
                 <>
@@ -211,7 +208,7 @@ export const SignInView: React.FC<SignInViewProps> = ({ onNavigateToSignUp }) =>
           {/* Security Guarantee Notice */}
           <div className="mt-5 pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-center gap-2 text-[11px] font-mono text-slate-500 dark:text-white/40 text-center">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" />
-            <span>Zero-Telemetry Guarantee • Strictly On-Device Storage</span>
+            <span>No third-party tracking • Your data stays yours</span>
           </div>
         </div>
       </motion.div>

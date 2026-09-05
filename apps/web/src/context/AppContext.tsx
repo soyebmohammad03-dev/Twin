@@ -18,7 +18,6 @@ export interface UserProfileData {
   handle: string;
   email: string;
   role: string;
-  location: string;
   bio: string;
   avatarUrl?: string;
   lightAvatarUrl?: string;
@@ -29,14 +28,11 @@ interface AppContextType {
   isAuthenticated: boolean;
   isAuthChecking: boolean;
   currentUser: User | null;
-  isVaultLocked: boolean;
   isSplashActive: boolean;
   dismissSplash: () => void;
   signIn: (input: SignInInput) => Promise<void>;
   signUp: (input: SignUpInput) => Promise<void>;
   signOut: () => Promise<void>;
-  lockVault: () => void;
-  unlockVault: () => void;
 
   // Theme & Appearance
   themePreference: ThemePreference;
@@ -67,27 +63,24 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   autoSynthesis: true,
   soundEffects: false,
   masterNotifications: true,
-  morningBriefing: true,
-  eveningRecap: true,
-  patternAlerts: true,
-  insightUpdates: true,
-  memoryReminders: true,
-  dailySummary: true,
   biometricLock: true,
   autoLockMinutes: '15',
-  incognitoMode: false,
   micAccess: true,
   retentionPeriod: 'forever',
 };
 
+// Phase 45: a brand-new user starts with an honestly empty role/bio —
+// never someone else's fabricated job title or biography. These two
+// fields are real, user-editable customization (see AccountModal.tsx),
+// so an empty default is the truthful "nothing set yet" state, not a
+// missing feature.
 const DEFAULT_PROFILE: UserProfileData = {
   name: INITIAL_USER.name,
   displayName: INITIAL_USER.displayName,
   handle: INITIAL_USER.handle,
   email: INITIAL_USER.email,
-  role: INITIAL_USER.role,
-  location: INITIAL_USER.location,
-  bio: 'Exploring high-velocity creative cognition and ambient computing interfaces.',
+  role: '',
+  bio: '',
 };
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -104,8 +97,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
-
-  const [isVaultLocked, setIsVaultLocked] = useState<boolean>(false);
 
   // 3. Theme & Appearance
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() => {
@@ -261,7 +252,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       lightAvatarUrl: generateInitialsAvatar(user.fullName, true),
     }));
     setIsAuthenticated(true);
-    setIsVaultLocked(false);
   }, []);
 
   const signIn = useCallback(
@@ -284,12 +274,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await authService.signOut();
     setCurrentUser(null);
     setIsAuthenticated(false);
-    setIsVaultLocked(false);
     setActiveAccountSection(null);
-    // Reset profile customizations (role/location/bio) rather than
-    // leaving them in state/localStorage — otherwise a different
-    // account signing in on this device would inherit the previous
-    // user's profile details.
+    // Reset profile customizations (role/bio) rather than leaving them
+    // in state/localStorage — otherwise a different account signing in
+    // on this device would inherit the previous user's profile details.
     setUserProfile(DEFAULT_PROFILE);
     try {
       localStorage.removeItem('twin_profile_user');
@@ -315,14 +303,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cancelled = true;
     };
   }, [applyAuthenticatedUser]);
-
-  const lockVault = useCallback(() => {
-    setIsVaultLocked(true);
-  }, []);
-
-  const unlockVault = useCallback(() => {
-    setIsVaultLocked(false);
-  }, []);
 
   // Update Preferences Handler
   const updatePreferences = useCallback((partial: Partial<UserPreferences>) => {
@@ -361,14 +341,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isAuthenticated,
         isAuthChecking,
         currentUser,
-        isVaultLocked,
         isSplashActive,
         dismissSplash,
         signIn,
         signUp,
         signOut,
-        lockVault,
-        unlockVault,
         themePreference,
         resolvedTheme,
         setThemePreference,

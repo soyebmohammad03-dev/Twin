@@ -226,16 +226,13 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
                 <span className="font-semibold text-sm sm:text-base text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                   {userProfile?.name || INITIAL_USER.name}
                 </span>
-                <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 shrink-0">
-                  PRO
-                </span>
               </div>
               <span className="text-xs text-slate-500 dark:text-white/50 truncate font-mono mt-0.5">
                 {userProfile?.email || INITIAL_USER.email}
               </span>
               <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                <span className="truncate">On-Device Vault Synced</span>
+                <span className="truncate">Signed in</span>
               </div>
             </div>
           </div>
@@ -432,7 +429,7 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
                   Help &amp; Architecture
                 </p>
                 <p className="text-[11px] text-slate-500 dark:text-white/40 leading-tight mt-0.5 truncate">
-                  Manifesto, shortcuts &amp; telemetry
+                  Philosophy, shortcuts &amp; build info
                 </p>
               </div>
             </div>
@@ -457,10 +454,10 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold leading-tight truncate">
-                  Lock &amp; Sign Out
+                  Sign Out
                 </p>
                 <p className="text-[11px] text-rose-500/80 dark:text-rose-400/70 leading-tight mt-0.5 truncate">
-                  Secure local vault session
+                  End your session on this device
                 </p>
               </div>
             </div>
@@ -470,10 +467,10 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
           </button>
         </div>
 
-        {/* Bottom subtle version & node stamp */}
+        {/* Bottom subtle status stamp */}
         <div className="px-4 py-2 bg-slate-50 dark:bg-black/40 border-t border-slate-100 dark:border-white/5 text-[10px] font-mono text-slate-500 dark:text-white/40 flex items-center justify-between shrink-0">
-          <span>Twin Vault Node: NY-042</span>
-          <span>v4.2.1-frosted</span>
+          <span>Twin</span>
+          <span>{import.meta.env.MODE}</span>
         </div>
       </div>
     </>,

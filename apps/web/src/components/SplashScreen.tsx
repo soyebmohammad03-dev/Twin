@@ -107,7 +107,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             className="mt-8 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-mono text-indigo-300"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>On-Device Vault Initialized</span>
+            <span>Loading your Twin</span>
           </motion.div>
         </div>
       </motion.div>

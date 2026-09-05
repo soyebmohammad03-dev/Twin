@@ -1,16 +1,20 @@
 # Twin
 
-Personal intelligence and digital twin platform. This repo is a
-monorepo: the existing web client, a new backend foundation, shared
-API contracts, and the database layer.
+Personal intelligence and digital twin platform: a real, evidence-grounded
+model of your memories, decisions, and relationships — not an AI pretending
+to be you. Monorepo: a React web client, a Fastify backend, shared API
+contracts, and the database layer.
 
-See [`docs/architecture.md`](docs/architecture.md) for what Phase 1
-built and why. This README is just how to run it.
+See [`docs/architecture.md`](docs/architecture.md) for the Phase 1
+foundational decisions (module layout, tooling choices) — it predates
+most of the product surface described below, which was built in later
+phases directly on that foundation. This README describes what the
+system actually does today and how to run it.
 
 ## Layout
 
 ```
-apps/web/          the existing frontend (Liquid Glass UI, unmodified)
+apps/web/          React + Vite frontend (Liquid Glass UI)
 apps/api/           Fastify + TypeScript backend
 packages/contracts/ shared Zod schemas — the API's request/response contract
 packages/db/         Drizzle ORM schema, migrations, Postgres client
@@ -21,9 +25,8 @@ infra/               docker-compose for local Postgres + pgvector
 
 - Node.js 20+ (developed against Node 24)
 - npm 10+ (workspaces support)
-- Docker, **if** you want to run the API against a real database.
-  Without Docker (or another local Postgres), the web app still runs
-  fine on its own — it doesn't talk to the API yet.
+- Docker, to run the API against a real Postgres database — needed
+  for anything beyond the web app's sign-in screen (see below).
 
 ## Install
 
@@ -36,15 +39,17 @@ npm install
 npm workspaces installs and links `apps/*` and `packages/*` together
 from this one command.
 
-## Running the web app (no backend required)
+## Running the web app
 
 ```bash
 npm run dev:web
 ```
 
-Opens the existing UI at `http://localhost:3000`, exactly as before —
-it still runs entirely on `localStorage` and has no dependency on the
-API.
+Opens the UI at `http://localhost:3000`. Sign-in, sign-up, and every
+data-backed view (Memory, Explore, Personal Model, Insights, Decisions,
+Twin Chat) call the real API — start the API too (below) for the app
+to be usable beyond the sign-in screen. Only theme/appearance
+preferences are still kept client-side in `localStorage`.
 
 ## Running the API
 
@@ -103,12 +108,24 @@ npm run build        # contracts + db -> api -> web, in dependency order
 
 ## What's real vs. not yet, right now
 
-- **Real:** the web UI (unchanged), the API process, request
-  validation, Postgres schema + migrations, password hashing + JWT +
-  refresh-token session issuance, the `/health` and `/health/db`
-  endpoints, the generated OpenAPI doc.
-- **Not yet:** the web UI does not call the API — it still uses its
-  original local prototype auth. There's no AI/model integration, no
-  vector search, no knowledge graph, no multimodal ingestion, and no
-  encryption-at-rest. See `docs/architecture.md` for the full list of
-  what's deliberately deferred and why.
+- **Real:** email/password auth (bcrypt + JWT access/refresh tokens,
+  rate-limited); ingestion of manual notes, real browser-based voice
+  transcription, web links (SSRF-hardened against redirects), and PDF
+  documents (real text extraction, no OCR); a knowledge graph built
+  from ingested memories and entity mentions; a Personal Model of
+  evidence-backed facts a user can confirm, correct, or dismiss, each
+  traceable to its source memories; Insights and Decision tracking,
+  both evidence-grounded rather than invented; Twin Chat, which
+  answers only from a bounded, citation-validated context built from
+  the user's own real data; pgvector-backed semantic search when
+  `EMBEDDING_PROVIDER=gemini` is configured (falls back to lexical +
+  entity-aware retrieval otherwise); Postgres schema + migrations; the
+  `/health` and `/health/db` endpoints; the generated OpenAPI doc.
+- **Not yet:** OCR/image-based ingestion (PDFs need a real text
+  layer); enforced session auto-lock (the setting exists in the UI but
+  isn't backed by a real timer); a native mobile/desktop app. There is
+  no client-side encryption or telemetry of any kind — data is stored
+  server-side in Postgres, scoped to the signed-in user. AI extraction,
+  embeddings, and reasoning (Twin Chat) require `GEMINI_API_KEY` and
+  are otherwise disabled by design, not by omission — see the provider
+  flags in `.env.example`.

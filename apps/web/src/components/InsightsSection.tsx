@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { InsightDto } from '@twin/contracts';
 import { insightsApi } from '../services/insightsApi';
+import { useApp } from '../context/AppContext';
 
 interface InsightsSectionProps {
   onInspectInsight: (insightId: string) => void;
@@ -62,6 +63,7 @@ export function confidenceLabel(confidence: number): string {
  * only an observation to accept or dismiss.
  */
 export const InsightsSection: React.FC<InsightsSectionProps> = ({ onInspectInsight }) => {
+  const { preferences } = useApp();
   const [insights, setInsights] = useState<InsightDto[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,8 +84,8 @@ export const InsightsSection: React.FC<InsightsSectionProps> = ({ onInspectInsig
   }, []);
 
   useEffect(() => {
-    load(true);
-  }, [load]);
+    load(preferences.autoSynthesis);
+  }, [load, preferences.autoSynthesis]);
 
   async function handleDismiss(insightId: string) {
     setBusyInsightId(insightId);

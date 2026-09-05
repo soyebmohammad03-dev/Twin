@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { MemoryCategory, MemoryItem } from '../types';
 import { ingestionApi } from '../services/ingestionApi';
 import { toMemoryItem } from '../services/memoryMapper';
@@ -17,6 +17,41 @@ type DocumentUploadState =
   | { status: 'success'; isDuplicate: boolean; title: string | null }
   | { status: 'error'; message: string };
 
+/**
+ * Phase 45: minimal ambient typing for the browser's real Web Speech
+ * API (SpeechRecognition) — not part of TypeScript's default DOM lib.
+ * Only the surface this component actually uses; not a full spec
+ * implementation.
+ */
+interface SpeechRecognitionResultEvent extends Event {
+  results: { [index: number]: { [index: number]: { transcript: string }; isFinal: boolean }; length: number };
+}
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+}
+interface SpeechRecognitionLike extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+}
+declare global {
+  interface Window {
+    SpeechRecognition?: new () => SpeechRecognitionLike;
+    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+  }
+}
+
+/** Exported for CaptureModal.speech.test.ts — the one bit of this component's voice logic that's pure enough to unit test without a DOM. */
+export function getSpeechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
+  if (typeof window === 'undefined') return null;
+  return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null;
+}
+
 export const CaptureModal: React.FC<CaptureModalProps> = ({
   isOpen,
   onClose,
@@ -30,7 +65,10 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
   const [tagsInput, setTagsInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [documentUpload, setDocumentUpload] = useState<DocumentUploadState>({ status: 'idle' });
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   if (!isOpen) return null;
 
@@ -55,21 +93,68 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
     }
   }
 
+  /**
+   * Phase 45: real speech-to-text via the browser's native
+   * SpeechRecognition API — replaces the previous fake recording that
+   * always filled the form with the same canned, invented text
+   * regardless of what was actually said. `description` is set only
+   * from genuine recognized speech; a browser without support gets an
+   * honest message, never a fabricated transcript.
+   */
   const handleStartVoice = () => {
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) {
+      setVoiceError('Voice recording needs a browser with speech recognition support (e.g. Chrome or Edge). You can still type your note directly.');
+      return;
+    }
+
+    setVoiceError(null);
+    setDescription('');
     setIsRecording(true);
     setRecordingSeconds(0);
-    const interval = setInterval(() => {
+    recordingIntervalRef.current = setInterval(() => {
       setRecordingSeconds((prev) => prev + 1);
     }, 1000);
 
-    setTimeout(() => {
-      clearInterval(interval);
-      setIsRecording(false);
-      setTitle('Voice Memo: Q3 Spatial Glass Hierarchy');
-      setDescription('Notes on maintaining consistent 24px outer radii and computing inner corners mathematically. Also discussed sync intervals for local Twin memories.');
-      setCategory('ideas');
-      setTagsInput('#voice, #design, #architecture');
-    }, 3200);
+    const recognition = new Ctor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      let finalTranscript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result?.isFinal) finalTranscript += result[0]?.transcript ?? '';
+      }
+      if (finalTranscript) {
+        setDescription((prev) => (prev ? `${prev} ${finalTranscript}` : finalTranscript).trim());
+      }
+    };
+    recognition.onerror = (event) => {
+      setVoiceError(`Voice recognition stopped: ${event.error}.`);
+      stopVoiceRecording();
+    };
+    recognition.onend = () => {
+      stopVoiceRecording();
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  function stopVoiceRecording() {
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setIsRecording(false);
+  }
+
+  const handleStopVoice = () => {
+    stopVoiceRecording();
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -221,21 +306,25 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
           </div>
         )}
 
-        {/* Voice Recording Simulation Panel */}
+        {/* Voice recording — real browser speech-to-text (Web Speech API), never a canned transcript */}
         {activeType === 'voice' && (
           <div className="rounded-2xl liquid-glass p-4 mb-4 flex flex-col items-center justify-center border border-indigo-500/30">
             {isRecording ? (
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-14 h-14 rounded-full bg-rose-500 text-white flex items-center justify-center animate-pulse shadow-lg shadow-rose-500/40">
-                  <span className="material-symbols-outlined text-2xl">mic</span>
-                </div>
+              <div className="flex flex-col items-center gap-3 w-full">
+                <button
+                  type="button"
+                  onClick={handleStopVoice}
+                  className="w-14 h-14 rounded-full bg-rose-500 text-white flex items-center justify-center animate-pulse shadow-lg shadow-rose-500/40 cursor-pointer"
+                  title="Stop recording"
+                >
+                  <span className="material-symbols-outlined text-2xl">stop</span>
+                </button>
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
                   <span className="text-xs font-mono text-rose-400 font-semibold">
-                    Recording... 00:0{recordingSeconds}
+                    Recording... {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
                   </span>
                 </div>
-                {/* Simulated live waveform */}
                 <div className="flex items-center gap-1 h-6">
                   {Array.from({ length: 12 }).map((_, i) => (
                     <div
@@ -245,6 +334,9 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
                     />
                   ))}
                 </div>
+                {description && (
+                  <p className="text-xs text-slate-600 dark:text-slate-300 text-center max-h-16 overflow-y-auto px-2">{description}</p>
+                )}
               </div>
             ) : (
               <button
@@ -256,6 +348,7 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
                 <span>Tap to Record Voice Memo</span>
               </button>
             )}
+            {voiceError && <p className="text-xs font-mono text-rose-500 mt-3 text-center">{voiceError}</p>}
           </div>
         )}
 

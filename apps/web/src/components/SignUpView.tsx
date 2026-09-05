@@ -164,7 +164,7 @@ export const SignUpView: React.FC<SignUpViewProps> = ({ onNavigateToSignIn }) =>
               Create your Twin account
             </h1>
             <p className="text-xs text-slate-500 dark:text-white/60 mt-1 max-w-xs leading-relaxed">
-              Establish your personal intelligence model, encrypted vault, and private cognition space.
+              Start building your personal intelligence model from your own memories and decisions.
             </p>
           </div>
 
@@ -400,7 +400,7 @@ export const SignUpView: React.FC<SignUpViewProps> = ({ onNavigateToSignIn }) =>
               {isLoading ? (
                 <>
                   <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  <span>Encrypting Local Vault...</span>
+                  <span>Creating your account...</span>
                 </>
               ) : isSuccess ? (
                 <>
@@ -436,7 +436,7 @@ export const SignUpView: React.FC<SignUpViewProps> = ({ onNavigateToSignIn }) =>
           {/* Security Guarantee Notice */}
           <div className="mt-5 pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-center gap-2 text-[11px] font-mono text-slate-500 dark:text-white/40 text-center">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" />
-            <span>Zero-Telemetry Guarantee • Strictly On-Device Storage</span>
+            <span>No third-party tracking • Your data stays yours</span>
           </div>
         </div>
       </motion.div>

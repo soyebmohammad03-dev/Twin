@@ -77,9 +77,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <div className="hidden sm:flex flex-col items-end text-right text-[11px] font-mono text-slate-400 dark:text-white/40 shrink-0">
           <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Zero-Telemetry Node
+            Signed in
           </span>
-          <span className="truncate max-w-[140px]">{userProfile?.role || 'Twin Architect'}</span>
+          {userProfile?.role && <span className="truncate max-w-[140px]">{userProfile.role}</span>}
         </div>
       </div>
 

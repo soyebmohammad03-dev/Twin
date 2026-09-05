@@ -699,19 +699,16 @@ const TwinAppInner: React.FC = () => {
         <div className="flex items-center gap-4 sm:gap-8">
           <span className="flex items-center gap-1.5 text-slate-700 dark:text-white/70">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#4ade80]" />
-            Secure Node: NY-042
-          </span>
-          <span className="hidden sm:inline text-slate-400 dark:text-white/30">
-            AES-256 GCM
+            Connected
           </span>
         </div>
         <div className="flex items-center gap-4 sm:gap-8">
           <span className="text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-            Identity Verified
+            Signed in
           </span>
           <span className="hidden md:inline text-slate-400 dark:text-white/30">
-            © 2026 Twin Systems
+            © 2026 Twin
           </span>
         </div>
       </footer>

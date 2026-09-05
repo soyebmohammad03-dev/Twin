@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AccountSection, ThemePreference, ThemeMode, AccentColor, FrostedIntensity } from '../types';
 import { INITIAL_USER } from '../data/mockData';
 import { useApp } from '../context/AppContext';
+import { API_BASE_URL } from '../services/authService';
 import { ToggleSwitch } from './ToggleSwitch';
 
 interface AccountModalProps {
@@ -82,7 +83,12 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   };
 
   const handleExportData = (format: 'json' | 'markdown') => {
-    setExportStatus(`Preparing encrypted ${format.toUpperCase()} archive...`);
+    // Honest scope: this exports the profile/preference settings
+    // stored in this browser, not the user's actual memories,
+    // decisions, or insights (those live server-side and have no
+    // export endpoint yet — see the real Twin API). Never claims
+    // "encrypted" for what is, in fact, a plain-text download.
+    setExportStatus(`Preparing ${format.toUpperCase()} file...`);
     setTimeout(() => {
       const content =
         format === 'json'
@@ -91,12 +97,11 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                 user: { ...INITIAL_USER, ...userProfile },
                 preferences,
                 exportedAt: new Date().toISOString(),
-                vaultVersion: '4.2.1',
               },
               null,
               2
             )
-          : `# Twin Intelligence Vault Export\n\nUser: ${profileName} (${profileEmail})\nRole: ${profileRole}\nDate: ${new Date().toLocaleDateString()}\n\n## Bio\n${profileBio}\n\n## System Diagnostics\n- Encryption: AES-256 GCM\n- Zero Telemetry: Verified\n- Private Key ID: ${INITIAL_USER.encryptionKeyId}\n`;
+          : `# Twin Profile Export\n\nUser: ${profileName} (${profileEmail})\nRole: ${profileRole}\nDate: ${new Date().toLocaleDateString()}\n\n## Bio\n${profileBio}\n\nNote: this file contains your local profile settings only — it does not include your memories, decisions, or insights, which are stored server-side.\n`;
 
       const blob = new Blob([content], {
         type: format === 'json' ? 'application/json' : 'text/markdown',
@@ -104,7 +109,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `twin-vault-backup-${new Date().toISOString().slice(0, 10)}.${
+      a.download = `twin-profile-export-${new Date().toISOString().slice(0, 10)}.${
         format === 'json' ? 'json' : 'md'
       }`;
       document.body.appendChild(a);
@@ -220,10 +225,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           <div className="hidden md:flex p-3.5 border-t border-slate-200 dark:border-white/10 items-center justify-between text-[11px] font-mono text-slate-500 dark:text-white/40">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Vault Active (AES-256)
-            </span>
-            <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-500/30">
-              PRO
+              Signed in
             </span>
           </div>
         </div>
@@ -280,16 +282,15 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                       <h4 className="font-semibold text-base text-slate-900 dark:text-white truncate">
                         {profileName}
                       </h4>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-500/30 shrink-0">
-                        PRO NEURAL
-                      </span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-white/50 font-mono mt-0.5 truncate">
                       {profileEmail}
                     </p>
-                    <p className="text-xs text-slate-600 dark:text-white/70 mt-1 truncate">
-                      {profileRole} • {INITIAL_USER.location}
-                    </p>
+                    {profileRole && (
+                      <p className="text-xs text-slate-600 dark:text-white/70 mt-1 truncate">
+                        {profileRole}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -370,7 +371,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                     Assistant Behaviors &amp; Preferences
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-500 dark:text-white/60 mt-1">
-                    Tune how your Digital Twin interacts, infers context, and executes memory reasoning.
+                    Saved for when Twin Chat can adapt its tone and proactivity to your preference — not yet applied to responses.
                   </p>
                 </div>
 
@@ -425,17 +426,17 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 gap-3">
                     <div className="min-w-0 flex-1 pr-2">
                       <h4 className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                        Autonomous Memory Synthesis
+                        Memory Synthesis
                       </h4>
                       <p className="text-xs text-slate-500 dark:text-white/50 leading-relaxed">
-                        Allow Twin to link memories and propose cross-domain insights quietly in the background
+                        Let Twin re-scan your memories for Insights each time you open your Profile
                       </p>
                     </div>
                     <ToggleSwitch
                       checked={preferences.autoSynthesis}
                       onChange={(checked) => updatePreferences({ autoSynthesis: checked })}
                       color="indigo"
-                      ariaLabel="Autonomous Memory Synthesis"
+                      ariaLabel="Memory Synthesis"
                     />
                   </div>
 
@@ -445,7 +446,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                         Haptic &amp; Audio Feedback
                       </h4>
                       <p className="text-xs text-slate-500 dark:text-white/50 leading-relaxed">
-                        Subtle acoustic feedback for memory captures and synthesized conclusions
+                        Saved for when sound effects ship — not yet played anywhere
                       </p>
                     </div>
                     <ToggleSwitch
@@ -459,169 +460,39 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               </div>
             )}
 
-            {/* 3. Notifications Section (All 7 toggles, responsive, perfectly contained) */}
+            {/* 3. Notifications Section — honest: Twin has no notification delivery (no email/push) yet.
+                 This used to offer six individually-toggleable "channels" (a scheduled morning
+                 briefing, pattern-recurrence alerts, spaced-repetition reminders, etc.) with
+                 specific invented behavior — none of it existed anywhere in the backend. Rather
+                 than leave fabricated feature descriptions in place, this is now a single honest
+                 opt-in preference with no channels to configure until real delivery exists. */}
             {activeTab === 'notifications' && (
               <div className="space-y-6 max-w-xl">
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-                    Notification &amp; Synthesis Alerts
+                    Notifications
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-500 dark:text-white/60 mt-1">
-                    Control how and when Twin alerts you to recognized cognitive patterns, briefings, and reminders.
+                    Twin doesn't send email or push notifications yet. This preference is saved for
+                    when that capability ships.
                   </p>
                 </div>
 
-                {/* Master toggle card */}
                 <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/25 flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1 pr-2">
                     <h4 className="font-semibold text-sm text-indigo-950 dark:text-indigo-200 truncate">
-                      Master Cognitive Alerts
+                      Notify me when available
                     </h4>
                     <p className="text-xs text-indigo-800/80 dark:text-indigo-300/80 mt-0.5 leading-relaxed">
-                      Enable all local on-device system notifications and daily thought recaps
+                      Opt in now so briefings and reminders reach you as soon as delivery exists
                     </p>
                   </div>
                   <ToggleSwitch
                     checked={preferences.masterNotifications}
                     onChange={(checked) => updatePreferences({ masterNotifications: checked })}
                     color="indigo"
-                    ariaLabel="Master Cognitive Alerts"
+                    ariaLabel="Notify me when available"
                   />
-                </div>
-
-                {/* Individual notification channels */}
-                <div className={`space-y-3 transition-opacity ${preferences.masterNotifications ? 'opacity-100' : 'opacity-50'}`}>
-                  {/* Channel 1: Morning Briefing */}
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 gap-3">
-                    <div className="min-w-0 flex-1 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[17px] text-amber-500">wb_sunny</span>
-                        <h4 className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                          Morning Briefing (08:30 AM)
-                        </h4>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-white/50 mt-0.5 leading-relaxed">
-                        3-point agenda recap with relevant historical context
-                      </p>
-                    </div>
-                    <ToggleSwitch
-                      checked={preferences.morningBriefing}
-                      onChange={(checked) => updatePreferences({ morningBriefing: checked })}
-                      disabled={!preferences.masterNotifications}
-                      color="indigo"
-                      ariaLabel="Morning Briefing"
-                    />
-                  </div>
-
-                  {/* Channel 2: Evening Thought Synthesis */}
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 gap-3">
-                    <div className="min-w-0 flex-1 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[17px] text-purple-500">nights_stay</span>
-                        <h4 className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                          Evening Thought Synthesis (09:00 PM)
-                        </h4>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-white/50 mt-0.5 leading-relaxed">
-                        Summarizes patterns and cognitive clusters detected during focus hours
-                      </p>
-                    </div>
-                    <ToggleSwitch
-                      checked={preferences.eveningRecap}
-                      onChange={(checked) => updatePreferences({ eveningRecap: checked })}
-                      disabled={!preferences.masterNotifications}
-                      color="indigo"
-                      ariaLabel="Evening Thought Synthesis"
-                    />
-                  </div>
-
-                  {/* Channel 3: Pattern Recurrence Alerts */}
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 gap-3">
-                    <div className="min-w-0 flex-1 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[17px] text-indigo-500">hub</span>
-                        <h4 className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                          Pattern Recurrence Alerts
-                        </h4>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-white/50 mt-0.5 leading-relaxed">
-                        Triggers when a concept is referenced &gt;3 times across independent notes
-                      </p>
-                    </div>
-                    <ToggleSwitch
-                      checked={preferences.patternAlerts}
-                      onChange={(checked) => updatePreferences({ patternAlerts: checked })}
-                      disabled={!preferences.masterNotifications}
-                      color="indigo"
-                      ariaLabel="Pattern Recurrence Alerts"
-                    />
-                  </div>
-
-                  {/* Channel 4: Insight Updates */}
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 gap-3">
-                    <div className="min-w-0 flex-1 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[17px] text-emerald-500">lightbulb</span>
-                        <h4 className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                          Insight Updates
-                        </h4>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-white/50 mt-0.5 leading-relaxed">
-                        Notifications when Twin discovers unlinked correlations between projects
-                      </p>
-                    </div>
-                    <ToggleSwitch
-                      checked={preferences.insightUpdates}
-                      onChange={(checked) => updatePreferences({ insightUpdates: checked })}
-                      disabled={!preferences.masterNotifications}
-                      color="emerald"
-                      ariaLabel="Insight Updates"
-                    />
-                  </div>
-
-                  {/* Channel 5: Memory Reminders */}
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 gap-3">
-                    <div className="min-w-0 flex-1 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[17px] text-amber-500">alarm</span>
-                        <h4 className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                          Memory Reminders
-                        </h4>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-white/50 mt-0.5 leading-relaxed">
-                        Spaced repetition pings for pivotal decisions and scheduled follow-ups
-                      </p>
-                    </div>
-                    <ToggleSwitch
-                      checked={preferences.memoryReminders}
-                      onChange={(checked) => updatePreferences({ memoryReminders: checked })}
-                      disabled={!preferences.masterNotifications}
-                      color="amber"
-                      ariaLabel="Memory Reminders"
-                    />
-                  </div>
-
-                  {/* Channel 6: Daily Cognitive Summary */}
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 gap-3">
-                    <div className="min-w-0 flex-1 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[17px] text-indigo-500">analytics</span>
-                        <h4 className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                          Daily Cognitive Summary
-                        </h4>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-white/50 mt-0.5 leading-relaxed">
-                        Executive briefing on knowledge clusters expanded and entity links forged
-                      </p>
-                    </div>
-                    <ToggleSwitch
-                      checked={preferences.dailySummary}
-                      onChange={(checked) => updatePreferences({ dailySummary: checked })}
-                      disabled={!preferences.masterNotifications}
-                      color="indigo"
-                      ariaLabel="Daily Cognitive Summary"
-                    />
-                  </div>
                 </div>
               </div>
             )}
@@ -634,7 +505,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                     Privacy &amp; Security Center
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-500 dark:text-white/60 mt-1">
-                    Twin operates with a strict zero-telemetry guarantee. Your personal vector embeddings never leave this hardware device.
+                    Twin does not run analytics or telemetry, and never shares your data with third parties or ad networks.
                   </p>
                 </div>
 
@@ -645,10 +516,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   </span>
                   <div className="min-w-0">
                     <h4 className="font-semibold text-sm text-emerald-800 dark:text-emerald-300">
-                      Zero-Telemetry Local Guarantee Active
+                      Account access is scoped to you
                     </h4>
                     <p className="text-xs text-slate-600 dark:text-white/70 mt-0.5 leading-relaxed">
-                      All memories, transcripts, decisions, and people dossiers are encrypted locally with AES-256 GCM. Private key ID: <code className="font-mono text-emerald-600 dark:text-emerald-300">{INITIAL_USER.encryptionKeyId}</code>.
+                      Every memory, decision, and connection in your account is checked against your signed-in identity — no other account can read or modify it. Twin does not share your data with third parties or ad networks.
                     </p>
                   </div>
                 </div>
@@ -703,24 +574,6 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Incognito Mode Toggle */}
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 gap-3">
-                    <div className="min-w-0 flex-1 pr-2">
-                      <h4 className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                        Incognito Memory Mode
-                      </h4>
-                      <p className="text-xs text-slate-500 dark:text-white/50 leading-relaxed">
-                        Ask Twin questions without saving the query to your persistent memory stream
-                      </p>
-                    </div>
-                    <ToggleSwitch
-                      checked={preferences.incognitoMode}
-                      onChange={(checked) => updatePreferences({ incognitoMode: checked })}
-                      color="amber"
-                      ariaLabel="Incognito Memory Mode"
-                    />
-                  </div>
-
                   {/* Microphone Access Toggle */}
                   <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 gap-3">
                     <div className="min-w-0 flex-1 pr-2">
@@ -742,7 +595,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   {/* Data Retention Period */}
                   <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-2">
                     <label className="text-xs font-mono uppercase tracking-wider text-slate-500 dark:text-white/60 block">
-                      Local Vector Retention Lifespan
+                      Memory Retention Period
                     </label>
                     <div className="grid grid-cols-3 gap-2 w-full">
                       {[
@@ -777,47 +630,14 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                     Memory &amp; Data Management
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-500 dark:text-white/60 mt-1">
-                    Inspect your local vector storage quotas, export full offline archives, or purge historical seeds.
+                    Export your data, or clear the local Twin Chat cache below.
                   </p>
                 </div>
 
-                {/* Storage Breakdown */}
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono text-slate-500 dark:text-white/60 uppercase tracking-wider">
-                      Local Vector Quota
-                    </span>
-                    <span className="text-xs font-mono text-indigo-600 dark:text-indigo-400 font-semibold">
-                      16.2 MB / 500 MB (3.2%)
-                    </span>
-                  </div>
-                  {/* Progress Bar */}
-                  <div className="h-2 w-full bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden flex">
-                    <div className="h-full bg-indigo-500 w-[18%]" title="Projects (6.8 MB)" />
-                    <div className="h-full bg-purple-500 w-[12%]" title="Ideas (4.2 MB)" />
-                    <div className="h-full bg-amber-500 w-[9%]" title="Decisions (3.1 MB)" />
-                    <div className="h-full bg-emerald-500 w-[6%]" title="People (2.1 MB)" />
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px] font-mono text-slate-500 dark:text-white/60">
-                    <span className="flex items-center gap-1.5 truncate">
-                      <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" /> Projects (6.8M)
-                    </span>
-                    <span className="flex items-center gap-1.5 truncate">
-                      <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" /> Ideas (4.2M)
-                    </span>
-                    <span className="flex items-center gap-1.5 truncate">
-                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" /> Decisions (3.1M)
-                    </span>
-                    <span className="flex items-center gap-1.5 truncate">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" /> People (2.1M)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Export Options */}
+                {/* Export Options — profile/preferences only; memories, decisions, and insights live server-side and have no export endpoint yet */}
                 <div className="space-y-3">
                   <h4 className="text-xs font-mono uppercase tracking-wider text-slate-500 dark:text-white/60">
-                    Data Export (Offline Portable Format)
+                    Export Profile Settings
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
@@ -830,10 +650,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white truncate">
-                          Export JSON Graph
+                          Export as JSON
                         </p>
                         <p className="text-[11px] text-slate-500 dark:text-white/50 mt-0.5 truncate">
-                          Full schema with weights &amp; embeddings
+                          Profile &amp; preference settings on this device
                         </p>
                       </div>
                     </button>
@@ -848,10 +668,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white truncate">
-                          Export Markdown Notes
+                          Export as Markdown
                         </p>
                         <p className="text-[11px] text-slate-500 dark:text-white/50 mt-0.5 truncate">
-                          Readable vault memos and transcripts
+                          Readable summary of your profile settings
                         </p>
                       </div>
                     </button>
@@ -864,26 +684,26 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   )}
                 </div>
 
-                {/* Reset Vault Danger Zone */}
+                {/* Clear cached Twin Chat history — a local UI cache only, never memories/decisions/insights, which live server-side and aren't touched by this */}
                 <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/25 space-y-3">
                   <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-semibold text-sm">
                     <span className="material-symbols-outlined text-[18px]">warning</span>
-                    Vault Danger Zone
+                    Clear Twin Chat History
                   </div>
                   <p className="text-xs text-rose-700 dark:text-rose-300/80 leading-relaxed">
-                    Resetting will restore all knowledge clusters, chat suggestions, and decisions back to the initial demonstration state.
+                    Clears your cached Twin Chat conversation on this device. Your memories, Personal Model, insights, and decisions are stored server-side and are not affected.
                   </p>
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm('Are you certain you want to reset your Twin Vault back to initial demonstration state?')) {
+                      if (confirm('Clear your cached Twin Chat conversation on this device?')) {
                         onResetVault();
                         onClose();
                       }
                     }}
                     className="py-2 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow transition-all active:scale-95 cursor-pointer"
                   >
-                    Reset Vault to Defaults
+                    Clear Chat History
                   </button>
                 </div>
               </div>
@@ -1010,14 +830,14 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               <div className="space-y-6 max-w-xl">
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-                    Twin Intelligence v4.2.1
+                    About Twin
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-500 dark:text-white/60 mt-1">
-                    An evolving, zero-telemetry personal intelligence system built for private high-velocity cognition.
+                    An evolving, evidence-grounded model of your world — not an AI pretending to be you.
                   </p>
                 </div>
 
-                {/* Core Architecture Manifesto */}
+                {/* Core Architecture Philosophy */}
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-3">
                   <div className="flex items-center gap-2">
                     <img
@@ -1030,14 +850,14 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                     </h4>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-white/70 leading-relaxed">
-                    Unlike conventional cloud assistants that send your private thoughts to centralized servers, Twin runs localized vector clustering and graph relationship reasoning right in your browser runtime.
+                    Every fact in your Personal Model, every insight, and every answer in Twin Chat traces back to a real memory you provided — nothing is inferred without evidence you can inspect.
                   </p>
                   <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] font-mono text-indigo-600 dark:text-indigo-300">
                     <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20">
-                      ✓ Zero Cloud Telemetry
+                      ✓ No Third-Party Tracking
                     </div>
                     <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20">
-                      ✓ Instant Local Recall
+                      ✓ Evidence-Backed Answers
                     </div>
                   </div>
                 </div>
@@ -1067,19 +887,15 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   </div>
                 </div>
 
-                {/* System Diagnostics */}
+                {/* System Info — real, verifiable values only (build mode from Vite, the actual configured API endpoint) */}
                 <div className="p-3 rounded-xl bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 text-[11px] font-mono text-slate-600 dark:text-white/50 space-y-1">
                   <div className="flex justify-between">
-                    <span>Node Build:</span>
-                    <span className="text-slate-900 dark:text-white font-medium">v4.2.1-prod-2026</span>
+                    <span>Build Mode:</span>
+                    <span className="text-slate-900 dark:text-white font-medium">{import.meta.env.MODE}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Active Gateway:</span>
-                    <span className="text-slate-900 dark:text-white font-medium">NY-042 (Local Sandboxed)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Encryption Engine:</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">AES-256 GCM (Hardware-backed)</span>
+                  <div className="flex justify-between gap-4">
+                    <span className="shrink-0">API Endpoint:</span>
+                    <span className="text-slate-900 dark:text-white font-medium truncate">{API_BASE_URL}</span>
                   </div>
                 </div>
               </div>
@@ -1094,10 +910,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-                      Lock Vault &amp; Sign Out?
+                      Sign Out?
                     </h3>
                     <p className="text-xs sm:text-sm text-slate-600 dark:text-white/70 mt-1 max-w-sm mx-auto leading-relaxed">
-                      Signing out locks your on-device cryptographic encryption keys. To resume using your Twin memories and context graph, you will return to the sign-in screen.
+                      Your memories and context graph stay safely stored on the server. Sign back in any time to pick up where you left off.
                     </p>
                   </div>
                   <div className="flex items-center justify-center gap-3 pt-3">
@@ -1113,7 +929,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                       onClick={handleExecuteSignOut}
                       className="py-2.5 px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm font-semibold shadow-lg shadow-rose-600/40 transition-all active:scale-95 cursor-pointer"
                     >
-                      Yes, Lock &amp; Sign Out
+                      Yes, Sign Out
                     </button>
                   </div>
                 </div>

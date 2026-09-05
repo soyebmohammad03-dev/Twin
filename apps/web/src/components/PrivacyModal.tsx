@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useApp } from '../context/AppContext';
 
 interface PrivacyModalProps {
   isOpen: boolean;
@@ -6,24 +7,26 @@ interface PrivacyModalProps {
   onResetVault: () => void;
 }
 
+/**
+ * Phase 45: this used to keep its own local `useState` for retention
+ * and biometric-lock — a duplicate, disconnected copy of the real
+ * settings already stored in AppContext's `preferences`, so toggling
+ * them here silently reset every time the modal reopened. Now reads
+ * and writes the same real preferences AccountModal uses. The fake
+ * "Anonymous Crash Diagnostics" toggle was removed outright — Twin has
+ * no telemetry system for it to control. The "Export Knowledge Graph"
+ * button was removed too — it never did anything but show a fake
+ * "Encrypted JSON Backup Prepared" message; real profile export lives
+ * in Account → Memory & Data.
+ */
 export const PrivacyModal: React.FC<PrivacyModalProps> = ({
   isOpen,
   onClose,
   onResetVault,
 }) => {
-  const [retention, setRetention] = useState<'forever' | '1year' | '90days'>('forever');
-  const [telemetry, setTelemetry] = useState(false);
-  const [biometricLock, setBiometricLock] = useState(true);
-  const [exportNotice, setExportNotice] = useState(false);
+  const { preferences, updatePreferences } = useApp();
 
   if (!isOpen) return null;
-
-  const handleExport = () => {
-    setExportNotice(true);
-    setTimeout(() => {
-      setExportNotice(false);
-    }, 2500);
-  };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
@@ -38,7 +41,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                 Privacy &amp; Security
               </h3>
-              <p className="text-xs font-mono text-slate-500">Twin On-Device Vault</p>
+              <p className="text-xs font-mono text-slate-500">Account access is scoped to you</p>
             </div>
           </div>
           <button
@@ -57,11 +60,11 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
             </span>
             <div className="text-xs">
               <p className="font-semibold text-slate-900 dark:text-white">
-                Zero Cloud-Telemetry Guarantee
+                No Third-Party Tracking
               </p>
               <p className="text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                Your memories, voice memos, and graph clusters are stored in an encrypted local vector
-                database. No data leaves this device.
+                Your memories, decisions, and graph connections are stored server-side, scoped to
+                your account. Twin runs no analytics or telemetry and never shares your data.
               </p>
             </div>
           </div>
@@ -69,42 +72,29 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
           {/* Retention Setting */}
           <div className="space-y-1.5">
             <label className="text-xs font-mono text-slate-400 block">
-              Memory Vault Retention
+              Memory Retention Period
             </label>
             <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setRetention('forever')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-mono transition-all ${
-                  retention === 'forever'
-                    ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 font-semibold'
-                    : 'bg-white/5 text-slate-400'
-                }`}
-              >
-                Keep Forever
-              </button>
-              <button
-                type="button"
-                onClick={() => setRetention('1year')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-mono transition-all ${
-                  retention === '1year'
-                    ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 font-semibold'
-                    : 'bg-white/5 text-slate-400'
-                }`}
-              >
-                1 Year
-              </button>
-              <button
-                type="button"
-                onClick={() => setRetention('90days')}
-                className={`py-2 px-2.5 rounded-xl text-xs font-mono transition-all ${
-                  retention === '90days'
-                    ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 font-semibold'
-                    : 'bg-white/5 text-slate-400'
-                }`}
-              >
-                90 Days
-              </button>
+              {(
+                [
+                  { id: 'forever', label: 'Keep Forever' },
+                  { id: '1year', label: '1 Year' },
+                  { id: '90days', label: '90 Days' },
+                ] as const
+              ).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => updatePreferences({ retentionPeriod: item.id })}
+                  className={`py-2 px-2.5 rounded-xl text-xs font-mono transition-all ${
+                    preferences.retentionPeriod === item.id
+                      ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 font-semibold'
+                      : 'bg-white/5 text-slate-400'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -114,61 +104,27 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
               <p className="text-xs font-medium text-slate-800 dark:text-white">
                 Face ID / Biometric Lock
               </p>
-              <p className="text-[11px] text-slate-500">Require unlock to view Memory Vault</p>
+              <p className="text-[11px] text-slate-500">Require unlock to view your memories</p>
             </div>
             <button
-              onClick={() => setBiometricLock(!biometricLock)}
+              onClick={() => updatePreferences({ biometricLock: !preferences.biometricLock })}
               className={`w-11 h-6 rounded-full transition-colors relative ${
-                biometricLock ? 'bg-indigo-500' : 'bg-slate-700'
+                preferences.biometricLock ? 'bg-indigo-500' : 'bg-slate-700'
               }`}
             >
               <span
                 className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                  biometricLock ? 'left-6' : 'left-1'
+                  preferences.biometricLock ? 'left-6' : 'left-1'
                 }`}
               />
             </button>
           </div>
 
-          {/* Telemetry Toggle */}
-          <div className="flex items-center justify-between py-2 border-t border-white/5">
-            <div>
-              <p className="text-xs font-medium text-slate-800 dark:text-white">
-                Anonymous Crash Diagnostics
-              </p>
-              <p className="text-[11px] text-slate-500">Help improve the Twin local engine</p>
-            </div>
-            <button
-              onClick={() => setTelemetry(!telemetry)}
-              className={`w-11 h-6 rounded-full transition-colors relative ${
-                telemetry ? 'bg-indigo-500' : 'bg-slate-700'
-              }`}
-            >
-              <span
-                className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                  telemetry ? 'left-6' : 'left-1'
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Export & Reset Actions */}
+          {/* Reset Action */}
           <div className="space-y-2 pt-2 border-t border-white/10">
             <button
-              onClick={handleExport}
-              className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-mono text-slate-300 flex items-center justify-center gap-2 border border-white/10"
-            >
-              <span className="material-symbols-outlined text-[16px]">file_download</span>
-              <span>
-                {exportNotice
-                  ? '✓ Encrypted JSON Backup Prepared'
-                  : 'Export Knowledge Graph (JSON)'}
-              </span>
-            </button>
-
-            <button
               onClick={() => {
-                if (confirm('Reset your Twin Memory Vault back to initial seed state?')) {
+                if (confirm('Clear your cached Twin Chat conversation on this device?')) {
                   onResetVault();
                   onClose();
                 }
@@ -176,7 +132,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
               className="w-full py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-xs font-mono text-rose-400 flex items-center justify-center gap-2 border border-rose-500/20"
             >
               <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-              <span>Reset Vault to Default Seeds</span>
+              <span>Clear Twin Chat History</span>
             </button>
           </div>
         </div>
