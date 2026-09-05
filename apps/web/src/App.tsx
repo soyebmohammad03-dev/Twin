@@ -36,6 +36,7 @@ import { SearchModal } from './components/SearchModal';
 import { ContextDrawer } from './components/ContextDrawer';
 import { MemoryDetailModal } from './components/MemoryDetailModal';
 import { EntityDetailModal } from './components/EntityDetailModal';
+import { CreateEntityModal } from './components/CreateEntityModal';
 import { DecisionDetailModal } from './components/DecisionDetailModal';
 import { FactEvidenceModal } from './components/FactEvidenceModal';
 import { InsightEvidenceModal } from './components/InsightEvidenceModal';
@@ -328,6 +329,7 @@ const TwinAppInner: React.FC = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [isDeepExplorationOpen, setIsDeepExplorationOpen] = useState(false);
+  const [isCreateEntityOpen, setIsCreateEntityOpen] = useState(false);
   const [isContextDrawerOpen, setIsContextDrawerOpen] = useState(false);
   const [selectedMemoryDetail, setSelectedMemoryDetail] = useState<MemoryItem | null>(null);
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
@@ -651,6 +653,7 @@ const TwinAppInner: React.FC = () => {
                   handleAskTwin(`Tell me about ${node.name} and how it relates to my current priorities.`, node.id);
                 }}
                 onInspectNode={(node) => setSelectedEntityId(node.id)}
+                onCreateEntity={() => setIsCreateEntityOpen(true)}
               />
             </motion.div>
           )}
@@ -774,6 +777,22 @@ const TwinAppInner: React.FC = () => {
         }}
         onOpenDecision={(id) => setSelectedDecisionId(id)}
         onGraphChanged={() => setGraphRefreshVersion((v) => v + 1)}
+      />
+
+      <CreateEntityModal
+        isOpen={isCreateEntityOpen}
+        onClose={() => setIsCreateEntityOpen(false)}
+        onCreated={(entity, wasCreated) => {
+          setIsCreateEntityOpen(false);
+          if (wasCreated) {
+            // Real, in-place update — same pattern updateDecisionInList
+            // already establishes — rather than a full GET /entities
+            // refetch just to show one new row.
+            setEntities((prev) => [entity, ...prev]);
+          }
+          setFocusEntityId(entity.id);
+          setSelectedEntityId(entity.id);
+        }}
       />
 
       <DecisionDetailModal

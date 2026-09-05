@@ -25,6 +25,8 @@ interface ExploreViewProps {
   onAskAboutNode: (node: GraphNode) => void;
   /** Phase 28: opens the existing EntityDetailModal for a real graph node — no second entity-detail implementation. */
   onInspectNode: (node: GraphNode) => void;
+  /** Phase 34: opens CreateEntityModal — the intentional "I already know this should exist" entry point. */
+  onCreateEntity: () => void;
 }
 
 /**
@@ -48,6 +50,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   onDeepExploration,
   onAskAboutNode,
   onInspectNode,
+  onCreateEntity,
 }) => {
   const [activeClusterFilter, setActiveClusterFilter] = React.useState<ExploreCluster | 'all'>('all');
 
@@ -100,15 +103,24 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onDeepExploration}
-          className="liquid-glass-heavy px-5 py-2.5 rounded-full flex items-center gap-2 hover:bg-indigo-500/20 transition-all border border-indigo-500/40 shadow-lg group active:scale-95 cursor-pointer self-start sm:self-auto"
-        >
-          <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-[#c2c1ff]">Deep Exploration</span>
-          <span className="material-symbols-outlined text-[18px] text-indigo-500 dark:text-[#c2c1ff] group-hover:translate-x-1 transition-transform">
-            arrow_forward
-          </span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={onCreateEntity}
+            className="liquid-glass px-4 py-2.5 rounded-full flex items-center gap-1.5 hover:bg-indigo-500/10 transition-all border border-slate-200/80 dark:border-white/10 shadow-sm active:scale-95 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px] text-indigo-500 dark:text-indigo-400">add</span>
+            <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-white">Add</span>
+          </button>
+          <button
+            onClick={onDeepExploration}
+            className="liquid-glass-heavy px-5 py-2.5 rounded-full flex items-center gap-2 hover:bg-indigo-500/20 transition-all border border-indigo-500/40 shadow-lg group active:scale-95 cursor-pointer"
+          >
+            <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-[#c2c1ff]">Deep Exploration</span>
+            <span className="material-symbols-outlined text-[18px] text-indigo-500 dark:text-[#c2c1ff] group-hover:translate-x-1 transition-transform">
+              arrow_forward
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Main Grid: Interactive Canvas & Side Clusters */}
@@ -137,12 +149,19 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           )}
 
           {!isEntitiesLoading && entities.length === 0 && (
-            <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
               <span className="material-symbols-outlined text-3xl text-indigo-400/60">hub</span>
               <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">
-                Nothing in your knowledge graph yet. Capture a memory mentioning a person, project, or goal and Twin
-                will start connecting it here.
+                Nothing in your knowledge graph yet. Capture a memory mentioning a person, project, or goal, or add one
+                directly if you already know it belongs here.
               </p>
+              <button
+                onClick={onCreateEntity}
+                className="mt-1 inline-flex items-center gap-1.5 px-4 py-2 rounded-full liquid-glass border border-indigo-500/40 text-indigo-600 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-500/10 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                Add your first entity
+              </button>
             </div>
           )}
 

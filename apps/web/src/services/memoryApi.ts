@@ -64,9 +64,19 @@ export const entityApi = {
     return parseOrThrow<EntityDto[]>(response);
   },
 
-  async create(input: CreateEntityRequest): Promise<EntityDto> {
+  /**
+   * POST /entities returns 201 for a genuinely new entity and 200 when
+   * an exact (case/whitespace/punctuation-insensitive) match already
+   * existed and was reused instead (see entities.service.ts's
+   * findOrCreateEntity) — surfaced here as `wasCreated` so a caller
+   * (Phase 34's CreateEntityModal) can tell a user their entity already
+   * existed rather than silently treating a reuse as a fresh creation.
+   */
+  async create(input: CreateEntityRequest): Promise<{ entity: EntityDto; wasCreated: boolean }> {
     const response = await authorizedFetch('/entities', { method: 'POST', body: JSON.stringify(input) });
-    return parseOrThrow<EntityDto>(response);
+    const wasCreated = response.status === 201;
+    const entity = await parseOrThrow<EntityDto>(response);
+    return { entity, wasCreated };
   },
 
   /** Reuses an existing entity with an exact (case-insensitive) name match, or creates one. */
@@ -74,6 +84,7 @@ export const entityApi = {
     const matches = await entityApi.list({ entityType, name });
     const exact = matches.find((entity) => entity.name.toLowerCase() === name.toLowerCase());
     if (exact) return exact;
-    return entityApi.create({ entityType, name });
+    const { entity } = await entityApi.create({ entityType, name });
+    return entity;
   },
 };
