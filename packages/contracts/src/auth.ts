@@ -25,7 +25,11 @@ export type SignUpRequest = z.infer<typeof signUpRequestSchema>;
 
 export const signInRequestSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.'),
-  password: z.string().min(1, 'Password is required.'),
+  // Phase 44: capped like signup's password field — an unbounded
+  // string here would let a caller send an arbitrarily large payload
+  // into bcrypt.compare() on every login attempt, a cheap DoS vector
+  // against an unauthenticated endpoint.
+  password: z.string().min(1, 'Password is required.').max(128),
 });
 export type SignInRequest = z.infer<typeof signInRequestSchema>;
 

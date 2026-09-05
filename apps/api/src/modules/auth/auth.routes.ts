@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import rateLimit from '@fastify/rate-limit';
 import {
   signUpRequestSchema,
   signInRequestSchema,
@@ -30,6 +31,16 @@ function toUserDto(user: UserRow): UserDto {
 export async function registerAuthRoutes(app: FastifyInstance) {
   const server = app.withTypeProvider<ZodTypeProvider>();
   const authService = createAuthService(app.db);
+
+  // Phase 44: brute-force/credential-stuffing throttle on the
+  // credential-bearing endpoints. Deliberately simple — an in-memory,
+  // per-IP counter (the plugin's default), not a distributed store;
+  // sound and explainable for this project's scale, not "elaborate"
+  // infrastructure. Scoped to this plugin's own encapsulation context
+  // (Fastify's default for a plain `.register()`), so it never affects
+  // any other route in the app. A caller past the limit gets an honest
+  // 429 with a Retry-After, never a silently-dropped request.
+  await server.register(rateLimit, { global: false });
 
   function setRefreshCookie(reply: FastifyReply, token: string, expiresAt: Date) {
     reply.setCookie(REFRESH_COOKIE, token, {
@@ -73,6 +84,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   server.post(
     '/signup',
     {
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
       schema: {
         body: signUpRequestSchema,
         response: { 201: authSessionResponseSchema, 409: errorResponseSchema },
@@ -93,6 +105,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   server.post(
     '/login',
     {
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
       schema: {
         body: signInRequestSchema,
         response: { 200: authSessionResponseSchema, 401: errorResponseSchema },
@@ -111,6 +124,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   server.post(
     '/refresh',
     {
+      config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
       schema: {
         body: refreshRequestSchema,
         response: { 200: authSessionResponseSchema, 401: errorResponseSchema },
