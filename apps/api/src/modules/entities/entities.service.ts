@@ -1,5 +1,13 @@
 import { and, desc, eq, ilike, inArray } from 'drizzle-orm';
-import { entities, type Queryable } from '@twin/db';
+import {
+  entities,
+  people as peopleTable,
+  projects as projectsTable,
+  goals as goalsTable,
+  decisions as decisionsTable,
+  type Database,
+  type Queryable,
+} from '@twin/db';
 import { findExactMatch } from '../graph/entityResolution.js';
 
 export class EntityError extends Error {
@@ -60,6 +68,47 @@ export interface FindOrCreateEntityResult {
 }
 
 /**
+ * Phase 33: creates the 1:1 subtype row for a brand-new entity, when
+ * the entity type has one AND the generic CreateEntityInput contract
+ * actually provides enough legitimate information to populate it —
+ * mirroring exactly the rule the AI extraction pipeline already
+ * follows (extraction/pipeline.ts's storeExtractionResult), so a
+ * manually-created entity is never structurally incomplete compared
+ * to an extracted one, but never fabricated either:
+ *
+ *   - person/project/goal/decision: no required (NOT NULL, no
+ *     default) subtype column exists beyond entityId, so the row is
+ *     always safe to create with the table's own defaults (status
+ *     'active'/'open', no dates) — never a guess, just "nothing is
+ *     known about this yet".
+ *   - event: events.starts_at is NOT NULL with no default, and
+ *     CreateEntityInput has no date field at all — creating a row
+ *     would require fabricating a date, which is forbidden. No
+ *     subtype row is created for a manually-created event; this is a
+ *     documented limitation, not a bug (see Phase 33 report).
+ *   - idea: has no subtype table (see entities.ts) — nothing to do.
+ */
+async function createSubtypeRowIfApplicable(tx: Queryable, entityType: EntityRow['entityType'], entityId: string): Promise<void> {
+  switch (entityType) {
+    case 'person':
+      await tx.insert(peopleTable).values({ entityId });
+      return;
+    case 'project':
+      await tx.insert(projectsTable).values({ entityId });
+      return;
+    case 'goal':
+      await tx.insert(goalsTable).values({ entityId });
+      return;
+    case 'decision':
+      await tx.insert(decisionsTable).values({ entityId });
+      return;
+    case 'event':
+    case 'idea':
+      return;
+  }
+}
+
+/**
  * Duplicate-safe entity creation — the resolve-or-create path every
  * caller that isn't doing its own batch resolution (the AI extraction
  * pipeline does its own via graph/entityResolution.ts's
@@ -73,8 +122,17 @@ export interface FindOrCreateEntityResult {
  * the row that won instead of letting a raw Postgres error escape —
  * two concurrent "create Alex" calls can never produce two Alex
  * entities, regardless of timing.
+ *
+ * Requires the real top-level `Database` (not just `Queryable`) — this
+ * is the only place a base entity and its subtype row are created
+ * together for the generic manual-creation path, so it owns the
+ * transaction boundary itself (same pattern as
+ * decisions.service.ts's createDecision): a base entity can never
+ * successfully commit without its required subtype row, and a failed
+ * insert (e.g. the unique-violation race below) rolls back cleanly
+ * with no partial row left behind.
  */
-export async function findOrCreateEntity(db: Queryable, userId: string, input: CreateEntityInput): Promise<FindOrCreateEntityResult> {
+export async function findOrCreateEntity(db: Database, userId: string, input: CreateEntityInput): Promise<FindOrCreateEntityResult> {
   const existing = await listEntities(db, userId, { entityType: input.entityType });
   const match = findExactMatch(input.name, input.entityType, existing);
   if (match) {
@@ -82,7 +140,11 @@ export async function findOrCreateEntity(db: Queryable, userId: string, input: C
   }
 
   try {
-    const entity = await createEntity(db, userId, input);
+    const entity = await db.transaction(async (tx) => {
+      const created = await createEntity(tx, userId, input);
+      await createSubtypeRowIfApplicable(tx, created.entityType, created.id);
+      return created;
+    });
     return { entity, wasCreated: true };
   } catch (err) {
     if (isUniqueViolation(err)) {
