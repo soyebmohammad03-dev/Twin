@@ -774,6 +774,10 @@ const TwinAppInner: React.FC = () => {
         }}
         onDeleteMemory={handleDeleteMemory}
         onOpenEntity={(entityId) => setSelectedEntityId(entityId)}
+        onMemoryCorrected={(id, newContent) => {
+          setMemories((prev) => prev.map((m) => (m.id === id ? { ...m, description: newContent } : m)));
+          setSelectedMemoryDetail((prev) => (prev && prev.id === id ? { ...prev, description: newContent } : prev));
+        }}
       />
 
       <EntityDetailModal

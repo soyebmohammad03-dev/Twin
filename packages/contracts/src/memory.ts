@@ -170,6 +170,27 @@ export const updateMemoryRequestSchema = z
   .refine((data) => Object.keys(data).length > 0, { message: 'Provide at least one field to update.' });
 export type UpdateMemoryRequest = z.infer<typeof updateMemoryRequestSchema>;
 
+/**
+ * Phase 38 — one real, immutable record of a content correction
+ * (packages/db/src/schema/memoryCorrections.ts), written only when
+ * memories.service.ts's updateMemory detects an actual `content`
+ * change. This is what makes "what did this memory used to say, and
+ * when was it corrected?" answerable at all — the `memories` table
+ * itself only ever holds the CURRENT content. Every field here is a
+ * fact about what the user genuinely changed, never an inference.
+ */
+export const memoryCorrectionDtoSchema = z.object({
+  id: z.string().uuid(),
+  previousContent: z.string(),
+  newContent: z.string(),
+  changedAt: z.string(),
+});
+export type MemoryCorrectionDto = z.infer<typeof memoryCorrectionDtoSchema>;
+
+/** Oldest first — a real correction history reads top-to-bottom as "what happened, in order," not newest-first like an activity feed. */
+export const listMemoryCorrectionsResponseSchema = z.array(memoryCorrectionDtoSchema);
+export type ListMemoryCorrectionsResponse = z.infer<typeof listMemoryCorrectionsResponseSchema>;
+
 export const linkMemoryEntityRequestSchema = z.object({
   entityId: z.string().uuid(),
   role: z.string().trim().min(1).max(64).optional(),

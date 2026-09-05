@@ -9,6 +9,7 @@ export * from './decisionHistory.js';
 export * from './events.js';
 export * from './sources.js';
 export * from './memories.js';
+export * from './memoryCorrections.js';
 export * from './memoryEntities.js';
 export * from './entityRelationships.js';
 export * from './ingestionJobs.js';

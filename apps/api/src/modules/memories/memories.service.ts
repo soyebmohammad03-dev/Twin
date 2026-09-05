@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { and, desc, eq, isNull } from 'drizzle-orm';
-import { memories, sources, memoryEntities, type Database, type Queryable } from '@twin/db';
+import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { memories, memoryCorrections, sources, memoryEntities, type Database, type Queryable } from '@twin/db';
 import type { CreateMemoryRequest, UpdateMemoryRequest } from '@twin/contracts';
 import { assertEntitiesOwnedByUser, type EntityRow } from '../entities/entities.service.js';
 
@@ -206,12 +206,60 @@ export async function updateMemory(
     updates.occurredAt = patch.occurredAt === null ? null : new Date(patch.occurredAt);
   }
 
+  // Phase 38: fetch the pre-patch content ONLY when content is actually
+  // being changed — a correction record must capture the real previous
+  // value, and this is the one field this table exists to preserve.
+  let previousContent: string | undefined;
+  if (patch.content !== undefined) {
+    const [before] = await db
+      .select({ content: memories.content })
+      .from(memories)
+      .where(and(eq(memories.id, memoryId), eq(memories.userId, userId), isNull(memories.deletedAt)))
+      .limit(1);
+    previousContent = before?.content;
+  }
+
   const [updated] = await db
     .update(memories)
     .set(updates)
     .where(and(eq(memories.id, memoryId), eq(memories.userId, userId), isNull(memories.deletedAt)))
     .returning();
+  if (!updated) return undefined;
+
+  // Only a REAL change is recorded — re-sending the same content is not
+  // a correction, and must not appear in the history timeline.
+  if (previousContent !== undefined && previousContent !== updated.content) {
+    await db.insert(memoryCorrections).values({
+      memoryId,
+      userId,
+      previousContent,
+      newContent: updated.content,
+    });
+  }
+
   return updated;
+}
+
+/** A memory's real content corrections, oldest first — ownership-checked the same way as getMemoryDetail. */
+export async function listMemoryCorrections(
+  db: Queryable,
+  userId: string,
+  memoryId: string,
+): Promise<(typeof memoryCorrections.$inferSelect)[]> {
+  const [memory] = await db
+    .select({ id: memories.id })
+    .from(memories)
+    .where(and(eq(memories.id, memoryId), eq(memories.userId, userId)))
+    .limit(1);
+  if (!memory) {
+    throw new MemoryError(`Memory not found: ${memoryId}`, 404);
+  }
+
+  return db
+    .select()
+    .from(memoryCorrections)
+    .where(eq(memoryCorrections.memoryId, memoryId))
+    .orderBy(asc(memoryCorrections.changedAt));
 }
 
 /** Soft-delete — sets deletedAt rather than removing the row. */

@@ -312,4 +312,225 @@ describe('memory and entity routes — real database', () => {
 
     await app.db.execute(sql`DELETE FROM users WHERE id = ${otherUserId}`);
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 38 — memory correction history: a real, append-only record of
+  // content corrections, never lost when a memory is edited.
+  // -------------------------------------------------------------------------
+
+  describe('GET /memories/:id/corrections', () => {
+    it('a freshly created memory has no correction history yet — an honest empty array, not fabricated', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/memories',
+        headers: authHeader(),
+        payload: { content: 'Fresh memory, no corrections yet', source: { sourceType: 'manual' } },
+      });
+      const id = created.json().id;
+
+      const response = await app.inject({ method: 'GET', url: `/memories/${id}/corrections`, headers: authHeader() });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual([]);
+    });
+
+    it('a no-op patch (identical content) never creates a correction row', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/memories',
+        headers: authHeader(),
+        payload: { content: 'Unchanged content', source: { sourceType: 'manual' } },
+      });
+      const id = created.json().id;
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/memories/${id}`,
+        headers: authHeader(),
+        payload: { content: 'Unchanged content' },
+      });
+
+      const response = await app.inject({ method: 'GET', url: `/memories/${id}/corrections`, headers: authHeader() });
+      expect(response.json()).toEqual([]);
+    });
+
+    it('a patch that changes only non-content fields never creates a correction row', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/memories',
+        headers: authHeader(),
+        payload: { content: 'Only metadata will change', importance: 2, source: { sourceType: 'manual' } },
+      });
+      const id = created.json().id;
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/memories/${id}`,
+        headers: authHeader(),
+        payload: { importance: 5, confidence: 0.5 },
+      });
+
+      const response = await app.inject({ method: 'GET', url: `/memories/${id}/corrections`, headers: authHeader() });
+      expect(response.json()).toEqual([]);
+    });
+
+    it('a real content correction writes exactly one accurate row, and the memory itself reflects only the new content', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/memories',
+        headers: authHeader(),
+        payload: { content: 'Original fact as first recorded', source: { sourceType: 'manual' } },
+      });
+      const id = created.json().id;
+
+      const updated = await app.inject({
+        method: 'PATCH',
+        url: `/memories/${id}`,
+        headers: authHeader(),
+        payload: { content: 'Corrected fact after user fixed it' },
+      });
+      expect(updated.json().content).toBe('Corrected fact after user fixed it');
+
+      const response = await app.inject({ method: 'GET', url: `/memories/${id}/corrections`, headers: authHeader() });
+      expect(response.statusCode).toBe(200);
+      const rows = response.json();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].previousContent).toBe('Original fact as first recorded');
+      expect(rows[0].newContent).toBe('Corrected fact after user fixed it');
+
+      // The original text is preserved in history — never destroyed —
+      // even though the memory's own current content no longer shows it.
+      const detail = await app.inject({ method: 'GET', url: `/memories/${id}`, headers: authHeader() });
+      expect(detail.json().content).toBe('Corrected fact after user fixed it');
+    });
+
+    it('multiple real corrections accumulate in chronological (oldest-first) order', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/memories',
+        headers: authHeader(),
+        payload: { content: 'v1', source: { sourceType: 'manual' } },
+      });
+      const id = created.json().id;
+
+      await app.inject({ method: 'PATCH', url: `/memories/${id}`, headers: authHeader(), payload: { content: 'v2' } });
+      await app.inject({ method: 'PATCH', url: `/memories/${id}`, headers: authHeader(), payload: { content: 'v3' } });
+
+      const response = await app.inject({ method: 'GET', url: `/memories/${id}/corrections`, headers: authHeader() });
+      const rows = response.json();
+      expect(rows).toHaveLength(2);
+      expect(rows[0].previousContent).toBe('v1');
+      expect(rows[0].newContent).toBe('v2');
+      expect(rows[1].previousContent).toBe('v2');
+      expect(rows[1].newContent).toBe('v3');
+      expect(new Date(rows[0].changedAt).getTime()).toBeLessThanOrEqual(new Date(rows[1].changedAt).getTime());
+    });
+
+    it('a corrected memory\'s source/provenance and creation timestamp never change — only content and updatedAt do', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/memories',
+        headers: authHeader(),
+        payload: { content: 'provenance check', epistemicStatus: 'explicit', source: { sourceType: 'manual', title: 'Original source' } },
+      });
+      const before = created.json();
+
+      const updated = await app.inject({
+        method: 'PATCH',
+        url: `/memories/${before.id}`,
+        headers: authHeader(),
+        payload: { content: 'provenance check, corrected' },
+      });
+      const after = updated.json();
+
+      expect(after.sourceId).toBe(before.sourceId);
+      expect(after.source.title).toBe('Original source');
+      expect(after.epistemicStatus).toBe('explicit');
+      expect(after.createdAt).toBe(before.createdAt);
+    });
+
+    it('correction history survives archiving — the audit trail is never lost when a memory is forgotten', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/memories',
+        headers: authHeader(),
+        payload: { content: 'will be archived after correction', source: { sourceType: 'manual' } },
+      });
+      const id = created.json().id;
+      await app.inject({
+        method: 'PATCH',
+        url: `/memories/${id}`,
+        headers: authHeader(),
+        payload: { content: 'corrected before archiving' },
+      });
+      await app.inject({ method: 'DELETE', url: `/memories/${id}`, headers: authHeader() });
+
+      const response = await app.inject({ method: 'GET', url: `/memories/${id}/corrections`, headers: authHeader() });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toHaveLength(1);
+    });
+
+    it('returns 404 for a non-existent memory id', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/memories/00000000-0000-0000-0000-000000000000/corrections',
+        headers: authHeader(),
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('rejects an unauthenticated request', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/memories',
+        headers: authHeader(),
+        payload: { content: 'auth required', source: { sourceType: 'manual' } },
+      });
+      const response = await app.inject({ method: 'GET', url: `/memories/${created.json().id}/corrections` });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('security: a second user cannot view another user\'s memory correction history, even for an archived memory', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/memories',
+        headers: authHeader(),
+        payload: { content: 'private correction history', source: { sourceType: 'manual' } },
+      });
+      const id = created.json().id;
+      await app.inject({ method: 'PATCH', url: `/memories/${id}`, headers: authHeader(), payload: { content: 'corrected' } });
+
+      const otherEmail = `memory-corrections-other-${Date.now()}@twin.test`;
+      const otherSignup = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { fullName: 'Other Corrections User', email: otherEmail, password: 'password123' },
+      });
+      const otherToken = otherSignup.json().accessToken;
+      const otherUserId = otherSignup.json().user.id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/memories/${id}/corrections`,
+        headers: { authorization: `Bearer ${otherToken}` },
+      });
+      expect(response.statusCode).toBe(404);
+
+      await app.db.execute(sql`DELETE FROM users WHERE id = ${otherUserId}`);
+    });
+
+    it('repeated identical rebuild-style patches remain idempotent — re-sending the current content never appends a new row', async () => {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/memories',
+        headers: authHeader(),
+        payload: { content: 'stable content', source: { sourceType: 'manual' } },
+      });
+      const id = created.json().id;
+      await app.inject({ method: 'PATCH', url: `/memories/${id}`, headers: authHeader(), payload: { content: 'stable content' } });
+      await app.inject({ method: 'PATCH', url: `/memories/${id}`, headers: authHeader(), payload: { content: 'stable content' } });
+
+      const response = await app.inject({ method: 'GET', url: `/memories/${id}/corrections`, headers: authHeader() });
+      expect(response.json()).toEqual([]);
+    });
+  });
 });

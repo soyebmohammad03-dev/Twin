@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import type { MemoryCorrectionDto } from '@twin/contracts';
 import { MemoryItem } from '../types';
+import { memoryApi } from '../services/memoryApi';
 
 interface MemoryDetailModalProps {
   memory: MemoryItem | null;
@@ -8,6 +10,8 @@ interface MemoryDetailModalProps {
   onDeleteMemory: (id: string) => void;
   /** Phase 7: opens the real knowledge-graph detail panel for the memory's linked entity, when one exists. */
   onOpenEntity?: (entityId: string) => void;
+  /** Phase 38: called after a correction is saved, with the memory's new content — lets the caller patch its own list instead of going stale until remount. */
+  onMemoryCorrected?: (id: string, newContent: string) => void;
 }
 
 export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
@@ -16,8 +20,51 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
   onDiscussWithTwin,
   onDeleteMemory,
   onOpenEntity,
+  onMemoryCorrected,
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [contentDraft, setContentDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [corrections, setCorrections] = useState<MemoryCorrectionDto[] | null>(null);
+  const [correctionsError, setCorrectionsError] = useState<string | null>(null);
+
+  function loadCorrections(id: string) {
+    setCorrectionsError(null);
+    memoryApi
+      .getCorrections(id)
+      .then((rows) => setCorrections(rows))
+      .catch(() => setCorrectionsError('Could not load correction history.'));
+  }
+
+  useEffect(() => {
+    setIsEditing(false);
+    setCorrections(null);
+    setCorrectionsError(null);
+    if (memory) {
+      setContentDraft(memory.description);
+      loadCorrections(memory.id);
+    }
+  }, [memory?.id]);
+
   if (!memory) return null;
+
+  async function saveCorrection() {
+    if (!memory) return;
+    const trimmed = contentDraft.trim();
+    if (!trimmed || trimmed === memory.description) {
+      setIsEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await memoryApi.update(memory.id, { content: trimmed });
+      onMemoryCorrected?.(memory.id, trimmed);
+      loadCorrections(memory.id);
+      setIsEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn">
@@ -63,11 +110,79 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             </div>
           )}
 
-          {/* Description */}
+          {/* Description — correctable: editing writes a real correction record, never silently overwritten */}
           <div className="liquid-glass rounded-2xl p-4 border border-white/10">
-            <p className="text-sm sm:text-base text-slate-700 dark:text-[#c7c4d6] leading-relaxed">
-              {memory.description}
-            </p>
+            {!isEditing ? (
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm sm:text-base text-slate-700 dark:text-[#c7c4d6] leading-relaxed">
+                  {memory.description}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContentDraft(memory.description);
+                    setIsEditing(true);
+                  }}
+                  className="shrink-0 text-xs font-mono text-indigo-400 hover:underline"
+                >
+                  Correct
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <textarea
+                  value={contentDraft}
+                  onChange={(e) => setContentDraft(e.target.value)}
+                  rows={4}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500 outline-none resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={saveCorrection}
+                    className="px-4 py-1.5 rounded-full bg-[#4f4ccd] dark:bg-[#c2c1ff] text-white dark:text-[#1c0b9f] text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+                  >
+                    {saving ? 'Saving…' : 'Save correction'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    className="px-4 py-1.5 rounded-full text-xs font-mono text-slate-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Correction history — real, immutable prior content, never erased by an edit */}
+          <div>
+            <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">Correction History</h3>
+            {correctionsError && <p className="text-xs text-red-400 font-mono">{correctionsError}</p>}
+            {!correctionsError && corrections && corrections.length === 0 && (
+              <p className="text-xs text-slate-500 font-mono">No corrections recorded yet.</p>
+            )}
+            {corrections && corrections.length > 0 && (
+              <div className="space-y-1.5">
+                {corrections.map((c) => (
+                  <div key={c.id} className="liquid-glass rounded-xl p-2.5 border border-white/10 text-xs">
+                    <div className="text-[10px] font-mono text-slate-500">
+                      {new Date(c.changedAt).toLocaleString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </div>
+                    <p className="text-slate-500 line-through decoration-slate-500/50 mt-0.5">{c.previousContent}</p>
+                    <p className="text-slate-700 dark:text-slate-300 mt-0.5">{c.newContent}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Source & Provenance Metadata */}

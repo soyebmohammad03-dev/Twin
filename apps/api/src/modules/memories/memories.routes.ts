@@ -8,9 +8,11 @@ import {
   linkMemoryEntityRequestSchema,
   memoryDetailDtoSchema,
   memoryEntityLinkDtoSchema,
+  listMemoryCorrectionsResponseSchema,
   errorResponseSchema,
   type MemoryDetailDto,
   type EntityDto,
+  type ListMemoryCorrectionsResponse,
 } from '@twin/contracts';
 import { authenticate, getAuthenticatedUserId } from '../../plugins/authenticate.js';
 import {
@@ -20,6 +22,7 @@ import {
   updateMemory,
   archiveMemory,
   linkMemoryToEntity,
+  listMemoryCorrections,
   MemoryError,
   type MemoryWithRelations,
 } from './memories.service.js';
@@ -199,6 +202,32 @@ export async function registerMemoryRoutes(app: FastifyInstance) {
         return { error: 'not_found', message: 'Memory not found.' };
       }
       reply.code(204);
+    },
+  );
+
+  server.get(
+    '/:id/corrections',
+    {
+      preHandler: authenticate,
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+        response: { 200: listMemoryCorrectionsResponseSchema, 404: errorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const userId = getAuthenticatedUserId(request);
+      try {
+        const rows = await listMemoryCorrections(app.db, userId, request.params.id);
+        const response: ListMemoryCorrectionsResponse = rows.map((row) => ({
+          id: row.id,
+          previousContent: row.previousContent,
+          newContent: row.newContent,
+          changedAt: row.changedAt.toISOString(),
+        }));
+        return response;
+      } catch (err) {
+        return handleServiceError(err, request, reply);
+      }
     },
   );
 

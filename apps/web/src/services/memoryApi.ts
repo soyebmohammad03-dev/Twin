@@ -9,6 +9,7 @@ import type {
   CreateMemoryRequest,
   EntityDto,
   EntityType,
+  ListMemoryCorrectionsResponse,
   MemoryDetailDto,
   MemoryEntityLinkDto,
   UpdateMemoryRequest,
@@ -43,6 +44,11 @@ export const memoryApi = {
   async archive(id: string): Promise<void> {
     const response = await authorizedFetch(`/memories/${id}`, { method: 'DELETE' });
     await parseOrThrow<void>(response);
+  },
+
+  async getCorrections(id: string): Promise<ListMemoryCorrectionsResponse> {
+    const response = await authorizedFetch(`/memories/${id}/corrections`);
+    return parseOrThrow<ListMemoryCorrectionsResponse>(response);
   },
 
   async linkEntity(memoryId: string, entityId: string, role?: string): Promise<MemoryEntityLinkDto> {
