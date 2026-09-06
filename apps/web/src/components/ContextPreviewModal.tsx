@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 import type { ContextPacket, IntentType, EpistemicTier } from '@twin/contracts';
 import { contextApi } from '../services/contextApi';
 import { toMemoryItem } from '../services/memoryMapper';
@@ -70,6 +71,8 @@ export const ContextPreviewModal: React.FC<ContextPreviewModalProps> = ({ query,
     };
   }, [query]);
 
+  useEscapeToClose(onClose, Boolean(query));
+
   if (!query) return null;
 
   return (
@@ -83,6 +86,7 @@ export const ContextPreviewModal: React.FC<ContextPreviewModalProps> = ({ query,
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
+            aria-label="Close"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

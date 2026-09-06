@@ -155,9 +155,11 @@ cache, or job-scheduling infrastructure beyond that:
    Postgres with `pgvector` installed works.
 
 Required environment variables beyond local dev's placeholders (see
-`.env.example` for the full list): real `JWT_ACCESS_SECRET`/
-`JWT_REFRESH_SECRET` (`openssl rand -hex 32`), a real `DATABASE_URL`,
-and `CORS_ORIGIN` set to the web app's real origin.
+`.env.example` for the full list): a real `JWT_ACCESS_SECRET`
+(`openssl rand -hex 32`) — refresh tokens are opaque random bytes
+hashed at rest, not JWTs, so there is no separate refresh secret —
+a real `DATABASE_URL`, and `CORS_ORIGIN` set to the web app's real
+origin.
 
 **Web Push (optional).** Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
 and `VAPID_SUBJECT` (a `mailto:` address or URL) to enable real

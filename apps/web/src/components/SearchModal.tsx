@@ -3,6 +3,7 @@ import { MemoryItem, TabType } from '../types';
 import { searchApi } from '../services/searchApi';
 import { toMemoryItem } from '../services/memoryMapper';
 import type { RetrievedMemoryDto } from '@twin/contracts';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -75,6 +76,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onSel
     [],
   );
 
+  useEscapeToClose(onClose, isOpen);
   if (!isOpen) return null;
 
   return (
@@ -96,6 +98,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, onSel
           <button
             onClick={onClose}
             className="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
+            aria-label="Close"
           >
             <span className="material-symbols-outlined text-base">close</span>
           </button>

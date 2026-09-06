@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import { API_BASE_URL } from '../services/authService';
 import { ToggleSwitch } from './ToggleSwitch';
 import { NotificationSettingsSection } from './NotificationSettingsSection';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -66,6 +67,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   // Data Export Status
   const [exportStatus, setExportStatus] = useState<string | null>(null);
 
+  useEscapeToClose(onClose, isOpen);
   if (!isOpen) return null;
 
   const isDark = resolvedTheme === 'dark';

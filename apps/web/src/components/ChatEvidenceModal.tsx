@@ -1,4 +1,5 @@
 import React from 'react';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 import type { SupportLevel } from '@twin/contracts';
 import { ChatMessage, MemoryItem } from '../types';
 import { toMemoryItem } from '../services/memoryMapper';
@@ -52,6 +53,7 @@ export const ChatEvidenceModal: React.FC<ChatEvidenceModalProps> = ({
   onSelectFact,
   onSelectInsight,
 }) => {
+  useEscapeToClose(onClose, Boolean(message));
   if (!message) return null;
   const evidence = message.evidence;
   const hasAnyEvidence =
@@ -68,6 +70,7 @@ export const ChatEvidenceModal: React.FC<ChatEvidenceModalProps> = ({
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
+            aria-label="Close"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

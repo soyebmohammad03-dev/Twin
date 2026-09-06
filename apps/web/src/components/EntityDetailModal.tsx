@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 import type { EntityDetailResponse, RelationshipEvidenceResponse } from '@twin/contracts';
 import { graphApi } from '../services/graphApi';
 import { toMemoryItem } from '../services/memoryMapper';
@@ -117,6 +118,8 @@ export const EntityDetailModal: React.FC<EntityDetailModalProps> = ({ entityId, 
     }
   }
 
+  useEscapeToClose(onClose, Boolean(entityId));
+
   if (!entityId) return null;
 
   return (
@@ -130,6 +133,7 @@ export const EntityDetailModal: React.FC<EntityDetailModalProps> = ({ entityId, 
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
+            aria-label="Close"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

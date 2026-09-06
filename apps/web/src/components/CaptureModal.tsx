@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MemoryCategory, MemoryItem } from '../types';
 import { ingestionApi } from '../services/ingestionApi';
 import { toMemoryItem } from '../services/memoryMapper';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface CaptureModalProps {
   isOpen: boolean;
@@ -69,6 +70,16 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
   const [documentUpload, setDocumentUpload] = useState<DocumentUploadState>({ status: 'idle' });
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEscapeToClose(onClose, isOpen);
+
+  // Closing the modal mid-recording (e.g. via Escape or backdrop) must
+  // actually stop the microphone/recognition, not just unmount the UI —
+  // otherwise SpeechRecognition and the timer keep running invisibly.
+  useEffect(() => {
+    if (!isOpen) stopVoiceRecording();
+  }, [isOpen]);
+  useEffect(() => () => stopVoiceRecording(), []);
 
   if (!isOpen) return null;
 
@@ -203,6 +214,7 @@ export const CaptureModal: React.FC<CaptureModalProps> = ({
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer"
+            aria-label="Close"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

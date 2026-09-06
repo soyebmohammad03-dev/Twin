@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 import type { InsightEvidenceResponse } from '@twin/contracts';
 import { insightsApi } from '../services/insightsApi';
 import { toMemoryItem } from '../services/memoryMapper';
@@ -68,6 +69,8 @@ export const InsightEvidenceModal: React.FC<InsightEvidenceModalProps> = ({
     };
   }, [insightId]);
 
+  useEscapeToClose(onClose, Boolean(insightId));
+
   if (!insightId) return null;
 
   return (
@@ -81,6 +84,7 @@ export const InsightEvidenceModal: React.FC<InsightEvidenceModalProps> = ({
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
+            aria-label="Close"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

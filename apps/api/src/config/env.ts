@@ -12,8 +12,10 @@ const envSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().int().positive().default(4000),
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required.'),
+    // Signs access tokens only. Refresh tokens are NOT JWTs — they're
+    // opaque random bytes, stored only as a SHA-256 hash (see
+    // modules/auth/tokens.ts) — so there is no separate refresh secret.
     JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET must be at least 16 characters.'),
-    JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET must be at least 16 characters.'),
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
     // Ingestion extraction provider. 'heuristic' (the default) does
     // real, non-AI, non-fake entity-mention linking against EXISTING

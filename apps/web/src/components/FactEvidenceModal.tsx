@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 import type { FactEvidenceResponse } from '@twin/contracts';
 import { personalModelApi } from '../services/personalModelApi';
 import { toMemoryItem } from '../services/memoryMapper';
@@ -69,6 +70,8 @@ export const FactEvidenceModal: React.FC<FactEvidenceModalProps> = ({ factId, on
     };
   }, [factId]);
 
+  useEscapeToClose(onClose, Boolean(factId));
+
   if (!factId) return null;
 
   return (
@@ -82,6 +85,7 @@ export const FactEvidenceModal: React.FC<FactEvidenceModalProps> = ({ factId, on
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
+            aria-label="Close"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

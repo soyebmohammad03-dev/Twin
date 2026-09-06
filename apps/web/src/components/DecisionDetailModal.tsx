@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 import type { DecisionDetailResponse, DecisionStatus, GroundedResponse, ListDecisionHistoryResponse, SupportLevel } from '@twin/contracts';
 import { decisionsApi } from '../services/decisionsApi';
 import { graphApi } from '../services/graphApi';
@@ -207,6 +208,8 @@ export const DecisionDetailModal: React.FC<DecisionDetailModalProps> = ({
     }
   }
 
+  useEscapeToClose(onClose, Boolean(decisionId));
+
   if (!decisionId) return null;
 
   const knownMemoryIds = new Set((detail?.supportingMemories ?? []).map((m) => m.id));
@@ -226,6 +229,7 @@ export const DecisionDetailModal: React.FC<DecisionDetailModalProps> = ({
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
+            aria-label="Close"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

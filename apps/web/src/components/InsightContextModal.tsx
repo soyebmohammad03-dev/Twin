@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 import type { InsightContextResponse, PersonalModelFactDto } from '@twin/contracts';
 import { insightsApi } from '../services/insightsApi';
 import { EPISTEMIC_LABEL, EPISTEMIC_COLOR } from './FactEvidenceModal';
@@ -51,6 +52,8 @@ export const InsightContextModal: React.FC<InsightContextModalProps> = ({ insigh
     };
   }, [insightId]);
 
+  useEscapeToClose(onClose, Boolean(insightId));
+
   if (!insightId) return null;
 
   const hasAnyContext = data && (data.directFacts.length > 0 || data.relatedFacts.length > 0);
@@ -66,6 +69,7 @@ export const InsightContextModal: React.FC<InsightContextModalProps> = ({ insigh
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
+            aria-label="Close"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

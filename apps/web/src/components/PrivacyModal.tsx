@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface PrivacyModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
 }) => {
   const { preferences, updatePreferences } = useApp();
 
+  useEscapeToClose(onClose, isOpen);
   if (!isOpen) return null;
 
   return (
@@ -47,6 +49,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
+            aria-label="Close"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>

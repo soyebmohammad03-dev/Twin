@@ -1,5 +1,6 @@
 import React from 'react';
 import { MemoryItem } from '../types';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface ContextDrawerProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export const ContextDrawer: React.FC<ContextDrawerProps> = ({
   activeMemoryIds,
   onToggleMemoryActive,
 }) => {
+  useEscapeToClose(onClose, isOpen);
   if (!isOpen) return null;
 
   return (
@@ -40,6 +42,7 @@ export const ContextDrawer: React.FC<ContextDrawerProps> = ({
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
+              aria-label="Close"
             >
               <span className="material-symbols-outlined text-lg">close</span>
             </button>
