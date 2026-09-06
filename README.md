@@ -136,30 +136,74 @@ npm run build        # contracts + db -> api -> web, in dependency order
 ## Production deployment
 
 Twin runs as three long-lived processes plus Postgres — no queue,
-cache, or job-scheduling infrastructure beyond that:
+cache, or job-scheduling infrastructure beyond that. `apps/api/Dockerfile`
+and `apps/web/Dockerfile` build the API/worker and web images
+respectively (both build from the **repo root**, since npm workspaces
+need the root lockfile and the sibling `packages/*` sources); use
+whatever container host you like (a single VM running all three via
+`docker compose`, or separate managed container services) — nothing
+here is tied to one cloud provider.
 
-1. **API** (`apps/api`) — `npm run build && npm start` (or
-   `node dist/server.js`). Stateless; run as many instances as you
-   like behind a load balancer.
-2. **Worker** (`apps/api`) — `npm run worker` (`node dist/worker.js`),
-   same build output as the API, same `DATABASE_URL`. Safe to run
-   exactly one instance or several — see "Running the background
-   worker" above for why duplicates never double-generate. If you
-   don't need scheduled/background notifications, don't run it; the
-   rest of the product is unaffected.
-3. **Web** (`apps/web`) — `npm run build` produces static assets
-   (`dist/`) to serve from any static host/CDN. `VITE_API_URL` must
-   point at the API's real public URL at build time.
+1. **API** (`apps/api`) — `docker build -f apps/api/Dockerfile -t twin-api .`,
+   then run it with the environment variables below. Binds to
+   `0.0.0.0:$PORT` and shuts down gracefully on `SIGTERM` (finishes
+   in-flight requests, closes the database pool) — safe to run more
+   than one instance behind a load balancer; it's stateless.
+2. **Worker** (`apps/api`, same image) — `docker run <image> node dist/worker.js`.
+   **Run exactly one instance** for scheduled categories (Morning
+   Briefing / Evening Thought Synthesis) to fire predictably once per
+   window rather than being raced N ways — though correctness doesn't
+   depend on this: the database's unique constraints
+   (`notifications.dedupe_key` / `sourceInsightId`) are the actual
+   authority, so even multiple instances can never create a duplicate
+   notification, they'd just do redundant work. If you don't need
+   scheduled/background notifications, don't run it — the rest of the
+   product is unaffected.
+3. **Web** (`apps/web`) — `docker build -f apps/web/Dockerfile --build-arg VITE_API_URL=https://your-api-domain -t twin-web .`.
+   `VITE_API_URL` is a **build-time** value (Vite bakes it into the
+   static bundle) — there is no way to change it after the image is
+   built, so it must already be the real, public API URL. The image
+   serves the static bundle via nginx (`apps/web/nginx.conf`); any
+   static host/CDN works just as well if you'd rather run
+   `npm run build --workspace apps/web` and upload `apps/web/dist/`
+   directly.
 4. **Postgres** with the `pgvector` extension — see
-   `infra/docker-compose.yml` for the reference config; any managed
-   Postgres with `pgvector` installed works.
+   `infra/docker-compose.yml` for the reference config, or any managed
+   Postgres with `pgvector` installed. `npm run db:migrate` creates the
+   extension itself (`CREATE EXTENSION IF NOT EXISTS vector`) before
+   applying migrations, so it works against a genuinely empty database —
+   verified against a from-scratch Postgres container with no prior
+   setup, not just the docker-compose dev database (whose own
+   `infra/init/` scripts would otherwise mask this).
 
-Required environment variables beyond local dev's placeholders (see
-`.env.example` for the full list): a real `JWT_ACCESS_SECRET`
-(`openssl rand -hex 32`) — refresh tokens are opaque random bytes
-hashed at rest, not JWTs, so there is no separate refresh secret —
-a real `DATABASE_URL`, and `CORS_ORIGIN` set to the web app's real
-origin.
+**Health checks.** `GET /health` is liveness (no database touched —
+safe for a fast, frequent orchestrator probe); `GET /health/db` is
+readiness (actually queries Postgres, reports the real result either
+way) — use it for a startup/readiness probe, not a tight liveness loop.
+
+### Environment variable contract
+
+| Variable | Required | Secret | Consumed by | Purpose |
+|---|---|---|---|---|
+| `DATABASE_URL` | Yes | Yes | API, worker, migrations | Postgres connection string. Never reaches the browser. |
+| `JWT_ACCESS_SECRET` | Yes | Yes | API | Signs access tokens (`openssl rand -hex 32`). Refresh tokens are opaque random bytes hashed at rest, not JWTs — there is no separate refresh secret. |
+| `CORS_ORIGIN` | Yes | No | API | The web app's real public origin (e.g. `https://twin.example.com`). The API rejects cross-origin requests from anywhere else. |
+| `PORT` | No (default `4000`) | No | API | Port the API binds to (`0.0.0.0`). Most container platforms set this for you. |
+| `VITE_API_URL` | Yes (web build) | No | Web (build-time only) | The API's real public URL. Baked into the static bundle at `vite build` — safe to expose, it's just a URL. |
+| `WORKER_INTERVAL_MS` | No (default `60000`) | No | Worker | How often the scheduler cycle runs; a real production value is more like 15 minutes (`900000`). |
+| `EXTRACTION_PROVIDER` / `EMBEDDING_PROVIDER` / `REASONING_PROVIDER` | No (default `heuristic`/`none`/`none`) | No | API | Set to `gemini` to enable real AI extraction/embeddings/reasoning. |
+| `GEMINI_API_KEY` | Only if any provider above is `gemini` | Yes | API | Google AI Studio key. Never reaches the browser; required at startup the moment any provider is set to `gemini`. |
+| `GEMINI_MODEL` / `EMBEDDING_MODEL` / `REASONING_MODEL` | No | No | API | Model names, each independently configurable. |
+| `VAPID_PUBLIC_KEY` | No | No | API (served to browser), Worker | Web Push public key — safe to expose, that's the point of VAPID. Generate with `npx web-push generate-vapid-keys`. |
+| `VAPID_PRIVATE_KEY` | No (required together with the two other VAPID vars for push to work) | Yes | Worker only | Signs push payloads. Never sent to the frontend, never logged. |
+| `VAPID_SUBJECT` | No | No | Worker | A `mailto:` address or URL identifying the sender, per the Web Push spec. |
+| `NODE_ENV` | No (default `development`) | No | API | Standard Node environment flag. |
+
+Leaving any *optional* Gemini/VAPID variable unset does not break the
+app — see "What's real vs. not yet" below for exactly what's honestly
+disabled in each case. No variable in this table is read by
+`apps/web`'s runtime except the one build-time exception noted above;
+everything else the frontend needs comes from the authenticated API.
 
 **Web Push (optional).** Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
 and `VAPID_SUBJECT` (a `mailto:` address or URL) to enable real
@@ -211,3 +255,9 @@ server timezone, since all its date math is timezone-explicit
   embeddings, and reasoning (Twin Chat) require `GEMINI_API_KEY` and
   are otherwise disabled by design, not by omission — see the provider
   flags in `.env.example`.
+- **Provider availability is never faked.** When `REASONING_PROVIDER=gemini`
+  and the Gemini API returns a timeout, a rate-limit/quota error, or an
+  unparseable response, Twin Chat reports that failure to the user
+  honestly (with a retry action) instead of returning a fabricated or
+  degraded-but-unlabeled answer — it never silently falls back to
+  inventing an answer that looks real.

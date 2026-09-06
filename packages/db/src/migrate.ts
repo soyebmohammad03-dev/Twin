@@ -20,6 +20,18 @@ async function main() {
   const migrationsFolder = path.resolve(import.meta.dirname, '../migrations');
 
   console.log(`Applying migrations from ${migrationsFolder} to ${connectionString.replace(/:[^:@]*@/, ':***@')}`);
+
+  // The pgvector extension has to exist before any migration touching
+  // a `vector` column can run. Locally this happens once, automatically,
+  // via infra/init/001-extensions.sql — but that script only ever runs
+  // on a brand-new docker-compose volume. Any real production database
+  // (a managed Postgres, a differently-orchestrated container, a
+  // restored backup) never sees that init script, so `npm run
+  // db:migrate` has to be able to do this itself. IF NOT EXISTS makes
+  // this safe to run every time, including against a database that
+  // already has the extension.
+  await pool.query('CREATE EXTENSION IF NOT EXISTS vector;');
+
   await migrate(db, { migrationsFolder });
   console.log('Migrations complete.');
 

@@ -58,7 +58,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       info: {
         title: 'Twin API',
         description:
-          'Phase 1 foundation. Auth is real (bcrypt + JWT + rotating refresh tokens) but not production-hardened — see docs/architecture.md.',
+          'Real bcrypt + JWT auth with rotating refresh tokens, rate-limited. See README.md for architecture, deployment, and current limitations.',
         version: '0.1.0',
       },
     },
