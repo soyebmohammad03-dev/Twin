@@ -19,7 +19,6 @@ export default defineConfig({
       PORT: '4001',
       DATABASE_URL: 'postgres://twin:twin@localhost:5432/twin_test',
       JWT_ACCESS_SECRET: 'test_access_secret_do_not_use_in_prod',
-      JWT_REFRESH_SECRET: 'test_refresh_secret_do_not_use_in_prod',
       CORS_ORIGIN: 'http://localhost:3000',
       EXTRACTION_PROVIDER: 'heuristic',
       EMBEDDING_PROVIDER: 'none',
