@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "dev:worker": "tsx watch src/worker.ts",
+    "prebuild": "npm run build --workspace @twin/contracts --workspace @twin/db",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "worker": "node dist/worker.js",
